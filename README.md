@@ -51,7 +51,23 @@ _Query: `<sorgu>` — N posts across M subreddits. No AI applied; topic ideas ar
 
 ## `/generate-blog` Komutu (ana yol)
 
-Tanım: `.claude/commands/generate-blog.md`. Üstündeki **CONFIG** bloğunu doldur (marka adı, yazar havuzu, kategori whitelist) — gerisi generic.
+`/generate-blog` bir **Claude Code komutudur**, npm paketine dahil DEĞİLDİR (`npm i` sadece CLI + lib indirir). Kullanmak için komut dosyasını bu repodan kendi projene kopyala:
+
+```bash
+# 1) CLI'yi devDependency olarak kur (reddit-scout + blog-image gelir)
+npm i -D reddit-blog-scout
+
+# 2) Komut dosyasını projenin .claude/commands/ altına al
+mkdir -p .claude/commands
+curl -o .claude/commands/generate-blog.md \
+  https://raw.githubusercontent.com/akifkadioglu/reddit-ai-scout/main/.claude/commands/generate-blog.md
+# (alternatif: repodaki .claude/commands/generate-blog.md dosyasını elle kopyala)
+
+# 3) Görseller için anahtar
+echo "GEMINI_API_KEY=..." >> .env
+```
+
+Sonra dosyanın en üstündeki `──── CONFIG ────` bloğunu doldur (marka, yazar havuzu, kategori whitelist, görsel stili, ton, yollar) — gerisi generic, bu değerleri okur. Artık Claude Code'da:
 
 ```
 /generate-blog <locale> <keyword>     # locale opsiyonel, default en
