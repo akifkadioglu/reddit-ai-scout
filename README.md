@@ -49,6 +49,46 @@ Parametreleri hedefin yanına `isim=değer` biçiminde eklersin; sırası öneml
 | `make run`   | Arama çalıştır (`q` zorunlu)    |
 | `make clean` | venv + `__pycache__` sil        |
 
+## Kullanım Örnekleri
+
+Makefile ile:
+
+```bash
+# En basit: tek kelime, düz arama
+make run q="python"
+
+# Çok kelimeli arama (tırnak şart)
+make run q="machine learning"
+
+# Sonuç sayısını sınırla
+make run q="bitcoin" LIMIT=5
+
+# OpenAI ile akıllı arama + özet
+make run q="rust vs go" AI=1
+
+# Hepsi birden
+make run q="indie game dev" LIMIT=3 AI=1
+```
+
+Doğrudan Python ile:
+
+```bash
+# Önce ortamı aç
+source venv/bin/activate
+
+# Düz arama
+python main.py "python"
+
+# Sonuç sınırlı
+python main.py "bitcoin" --limit 5
+
+# OpenAI akıllı arama + özet
+python main.py "rust vs go" --ai
+
+# Hepsi birden
+python main.py "indie game dev" --limit 3 --ai
+```
+
 ## Doğrudan Python ile
 
 Makefile kullanmak istemezsen önce `source venv/bin/activate` ile ortamı aç, sonra `main.py`'yi kelimeyle çağır. `--limit` ile sonuç sayısını, `--ai` bayrağıyla OpenAI desteğini kontrol edersin.
