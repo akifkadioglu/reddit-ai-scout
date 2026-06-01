@@ -21,6 +21,17 @@ set -uo pipefail
 MODEL="gemini-2.5-flash-image"
 API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 
+# --- image size config (override via env) ---
+# Nano Banana only accepts ASPECT RATIO presets (1:1, 16:9, 4:3, 3:2, ...),
+# NOT arbitrary pixel sizes. We request the closest ratio, then crop/resize to
+# the exact target px with sips (macOS built-in).
+#   IMG_ASPECT  = ratio preset sent to the API (closest to 1200x630 is 16:9)
+#   IMG_WIDTH   = exact final width  in px
+#   IMG_HEIGHT  = exact final height in px
+IMG_ASPECT="${IMG_ASPECT:-16:9}"
+IMG_WIDTH="${IMG_WIDTH:-1200}"
+IMG_HEIGHT="${IMG_HEIGHT:-630}"
+
 # --- resolve repo root (script lives in <root>/scripts) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -129,11 +140,14 @@ generate_one() {
 
   # build request body safely with python3 json.dumps
   local body
-  body="$(PROMPT="$prompt" "$PY" -c '
+  body="$(PROMPT="$prompt" IMG_ASPECT="$IMG_ASPECT" "$PY" -c '
 import json, os
 print(json.dumps({
   "contents": [{"parts": [{"text": os.environ["PROMPT"]}]}],
-  "generationConfig": {"responseModalities": ["IMAGE"]},
+  "generationConfig": {
+    "responseModalities": ["IMAGE"],
+    "imageConfig": {"aspectRatio": os.environ["IMG_ASPECT"]},
+  },
 }))')"
 
   local resp
@@ -160,7 +174,12 @@ else:
     sys.stderr.write("no image part in response\n")
 sys.exit(1)
 ' <<< "$resp"; then
-    echo "ok     $target"
+    # force exact pixel size: scale to target width, then center-crop to height
+    if command -v sips >/dev/null 2>&1; then
+      sips --resampleWidth "$IMG_WIDTH" "$out" >/dev/null 2>&1
+      sips -c "$IMG_HEIGHT" "$IMG_WIDTH" "$out" >/dev/null 2>&1
+    fi
+    echo "ok     $target (${IMG_WIDTH}x${IMG_HEIGHT})"
     GENERATED=$((GENERATED + 1))
   else
     echo "FAIL   $target" >&2
