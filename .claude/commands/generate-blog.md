@@ -333,7 +333,6 @@ Detailed cover visual description, 80 to 200 words, landscape, no text, no logos
 
 Rules:
 
-* 1200px X 630px aspect ratio
 * Every image MUST contain IMAGE_PROMPT metadata.
 * The cover MUST contain an IMAGE_TARGET + IMAGE_PROMPT block at the top of the body.
 * IMAGE_PROMPT must be 80 to 200 words.
