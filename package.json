@@ -1,6 +1,6 @@
 {
   "name": "reddit-blog-scout",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Mine Reddit discussions for blog topic ideas: keyword -> real posts + subreddits as Markdown. Headless-Chrome cookie harvest beats Reddit's 403 anti-bot, then plain fetch. Feeds /generate-blog.",
   "type": "module",
   "main": "src/reddit.js",

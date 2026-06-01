@@ -83,6 +83,21 @@ async function launch() {
   throw new Error("Could not launch a browser. Run: npx puppeteer browsers install chrome");
 }
 
+/**
+ * Poll page.cookies() until the guest auth cookie (`token_v2`) appears, or a short timeout.
+ * networkidle2 can fire before Reddit's JS sets it; this removes that timing race.
+ */
+async function waitForAuthCookie(page, { timeoutMs = 8000, intervalMs = 300 } = {}) {
+  let cookies = await page.cookies();
+  let waited = 0;
+  while (!cookies.some((c) => c.name === "token_v2") && waited < timeoutMs) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    waited += intervalMs;
+    cookies = await page.cookies();
+  }
+  return cookies;
+}
+
 /** Harvest a fresh guest cookie via headless Chrome and cache it. */
 async function harvest() {
   const browser = await launch();
@@ -90,17 +105,30 @@ async function harvest() {
     const pages = await browser.pages();
     const page = pages.length ? pages[0] : await browser.newPage();
     await page.setUserAgent(REAL_UA);
-    // Visit a normal HTML page so Reddit sets the guest cookie(s). Wait for network idle:
-    // domcontentloaded fires before Reddit's JS sets token_v2/loid/csv/session, leaving
-    // only `edgebucket` — an incomplete cookie still gets 403'd on the .json endpoints.
+    // Visit a normal HTML page so Reddit sets the guest cookie(s). `networkidle2` alone is
+    // racy: it can fire before Reddit's JS sets the auth cookies (token_v2/loid/csv),
+    // leaving only `edgebucket` — an incomplete cookie still gets 403'd on .json. So after
+    // navigating we POLL until the essential `token_v2` cookie appears (the 403/200 pivot),
+    // reloading once if needed, instead of trusting the idle event's timing.
     await page.goto("https://www.reddit.com", { waitUntil: "networkidle2", timeout: 30000 });
     // page.cookies() returns httpOnly cookies too (unlike document.cookie).
-    const cookies = await page.cookies();
+    let cookies = await waitForAuthCookie(page);
+    if (!cookies.some((c) => c.name === "token_v2")) {
+      // One reload to give Reddit another chance to set the guest token.
+      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
+      cookies = await waitForAuthCookie(page);
+    }
     const cookie = cookies
       .filter((c) => c.name && c.value)
       .map((c) => `${c.name}=${c.value}`)
       .join("; ");
     if (!cookie) throw new Error("harvested empty cookie set from reddit.com");
+    if (!cookies.some((c) => c.name === "token_v2")) {
+      // Still no guest token -> cache it anyway (best-effort) but warn; fetch may 403.
+      process.stderr.write(
+        "[reddit-blog-scout] warning: guest token cookie (token_v2) not set; requests may be blocked.\n"
+      );
+    }
     writeCache(cookie);
     return { cookie, ua: REAL_UA };
   } finally {
