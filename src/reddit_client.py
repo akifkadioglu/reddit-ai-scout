@@ -1,55 +1,111 @@
-"""Reddit scraper via a real browser (Playwright).
+"""Reddit scraper via a real browser (Playwright) with a persistent profile.
 
-Reddit blocks plain HTTP scripts (403). A real browser context gets a guest
-session cookie, so navigating to the .json endpoints works without OAuth.
-Uses installed Google Chrome when available (channel="chrome") — far less
-likely to be flagged than the bundled headless shell.
+Reddit blocks plain HTTP scripts (403). A real browser works: we first visit a
+normal Reddit page so a guest cookie is set, then read the .json endpoints. No
+login or OAuth needed. The cookie persists in REDDIT_PROFILE_DIR across runs.
+
+When the IP is anti-bot blocked, guest traffic gets an HTML block page instead
+of JSON. To pass it, we auto-read your logged-in Reddit cookies from your local
+browser (REDDIT_COOKIE_BROWSER) and inject them into the context — no `make
+login` needed. If that read fails, we fall back to guest mode.
 """
 import json
+import sys
 from urllib.parse import urlencode
 
 from playwright.sync_api import sync_playwright
 
-from .config import REDDIT_HEADLESS
+from .config import REDDIT_COOKIE_BROWSER, REDDIT_COOKIE_DOMAIN, REDDIT_PROFILE_DIR
 
 BASE_URL = "https://www.reddit.com"
+# Sirayla denenecek host'lar — biri bloklarsa digerine gec
+HOSTS = ["https://www.reddit.com", "https://old.reddit.com"]
 
 
-def _launch(p):
-    """Önce gerçek Chrome'u dene, yoksa paketli chromium'a düş."""
+def load_browser_cookies() -> list[dict]:
+    """Yerel tarayıcıdan Reddit cookie'lerini oku, Playwright formatına çevir.
+
+    Hata olursa (paket yok / okuma izni yok) misafir moda düş: uyarı bas, [] dön.
+    """
+    try:
+        import browser_cookie3
+
+        loader = getattr(browser_cookie3, REDDIT_COOKIE_BROWSER, browser_cookie3.chrome)
+        jar = loader(domain_name=REDDIT_COOKIE_DOMAIN)
+
+        cookies = []
+        for c in jar:
+            cookie = {
+                "name": c.name,
+                "value": c.value,
+                "domain": c.domain,
+                "path": c.path or "/",
+                "secure": bool(c.secure),
+                "sameSite": "Lax",
+            }
+            if c.expires:
+                cookie["expires"] = int(c.expires)
+            cookies.append(cookie)
+        return cookies
+    except Exception as e:
+        print(
+            f"[cookies] could not read {REDDIT_COOKIE_BROWSER} cookies ({e}); "
+            "falling back to guest mode.",
+            file=sys.stderr,
+        )
+        return []
+
+
+def open_context(p, headless: bool = True):
+    """Kalıcı profille bir browser context aç. Gerçek Chrome > paketli chromium."""
     for kwargs in ({"channel": "chrome"}, {}):
         try:
-            return p.chromium.launch(headless=REDDIT_HEADLESS, **kwargs)
+            return p.chromium.launch_persistent_context(
+                REDDIT_PROFILE_DIR, headless=headless, **kwargs
+            )
         except Exception:
             continue
-    raise RuntimeError("Could not launch a browser. Run: python -m playwright install chromium")
+    raise RuntimeError("Could not launch a browser. Run: playwright install chromium")
 
 
-def _parse_json(text: str) -> dict:
-    """Body metnini JSON'a çevir; blok sayfasıysa net hata ver."""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        raise RuntimeError(
-            "Reddit returned a non-JSON page (likely a network/bot block). "
-            "Try REDDIT_HEADLESS=0 in .env, or use a different network."
-        )
+def _fetch_one(page, path: str, params: dict) -> dict:
+    """Bir endpoint'i host'lar arasinda dene; ilk JSON donen kazanir."""
+    qs = urlencode(params)
+    for host in HOSTS:
+        # JSON URL'sine dogrudan git; Chrome ham JSON'u <pre> icinde gosterir
+        page.goto(f"{host}{path}.json?{qs}", wait_until="domcontentloaded", timeout=20000)
+        text = page.evaluate("() => document.body.innerText")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            continue  # blok sayfasi -> sonraki host
+    raise RuntimeError(
+        "All Reddit hosts returned a block page. Confirm you're logged into "
+        f"Reddit in {REDDIT_COOKIE_BROWSER} (REDDIT_COOKIE_BROWSER). "
+        "Last resort: `make login` or a different network/VPN."
+    )
 
 
 def _fetch_endpoints(paths_params: list[tuple[str, dict]]) -> list[dict]:
     """Tek browser oturumunda birden çok .json endpoint çek."""
     results: list[dict] = []
     with sync_playwright() as p:
-        browser = _launch(p)
-        page = browser.new_context().new_page()
-        # Önce reddit.com'a gir -> guest session cookie al
+        # Reddit headless'i 403 blokluyor -> her zaman gorunur (headed) cek
+        ctx = open_context(p, headless=False)
+        # Logged-in cookie'leri yerel tarayıcıdan enjekte et -> block'u gec
+        cookies = load_browser_cookies()
+        if cookies:
+            ctx.add_cookies(cookies)
+            print(
+                f"[cookies] loaded {len(cookies)} reddit cookies "
+                f"from {REDDIT_COOKIE_BROWSER}"
+            )
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        # Once normal HTML sayfasina ugra -> misafir cookie olussun
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=20000)
         for path, params in paths_params:
-            url = f"{BASE_URL}{path}.json?{urlencode(params)}"
-            # JSON URL'sine dogrudan git; Chrome ham JSON'u <pre> icinde gosterir
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            results.append(_parse_json(page.evaluate("() => document.body.innerText")))
-        browser.close()
+            results.append(_fetch_one(page, path, params))
+        ctx.close()
     return results
 
 

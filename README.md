@@ -1,6 +1,6 @@
 # Reddit AI Scout
 
-Kullanıcının girdiği kelimeye göre Reddit'ten veri çeker. Opsiyonel OpenAI desteğiyle akıllı arama + özet. Sonuçları `result/<kelime>.json` olarak kaydeder.
+Girdiğin kelimeyi Reddit'te araştırır, gerçek tartışmalardan **10 blog konusu (başlık + açıklama)** üretir ve `result/<kelime>.md` olarak kaydeder. OpenAI **zorunludur**; çıktı dili `.env`'den ayarlanır.
 
 ## Kurulum
 
@@ -15,95 +15,93 @@ pip install -r requirements.txt
 playwright install chromium       # Reddit erişimi icin browser
 ```
 
-Sırlar:
+Ayarlar:
 
 ```bash
 cp .env.example .env              # Windows: copy .env.example .env
-# .env içine OPENAI_API_KEY yaz
+# .env içine OPENAI_API_KEY yaz (zorunlu)
+# OUTPUT_LANG ve REDDIT_COOKIE_BROWSER ayarla
 ```
+
+## .env Değişkenleri
+
+| Değişken                | Açıklama                                              | Default        |
+|-------------------------|-------------------------------------------------------|----------------|
+| `OPENAI_API_KEY`        | OpenAI anahtarı (**zorunlu**)                         | —              |
+| `OPENAI_MODEL`          | Kullanılacak model                                    | `gpt-4o-mini`  |
+| `OUTPUT_LANG`           | Çıktı dili — locale kodu (`en_US`, `tr_TR`, `de_DE`…) | `en_US`        |
+| `REDDIT_COOKIE_BROWSER` | Cookie okunacak tarayıcı (`chrome/arc/brave/edge/…`)  | `chrome`       |
 
 ## Reddit'e Nasıl Erişiyor
 
-Reddit, düz HTTP script'lerini (`requests`) çoğu IP'de **403** ile blokluyor. Bu yüzden veri **gerçek bir tarayıcı (Playwright)** üzerinden çekiliyor: araç headless Chrome açar, `reddit.com`'dan misafir oturum çerezi alır, sonra `.json` adreslerine gidip veriyi okur. OAuth/şifre gerekmez.
+Reddit, düz HTTP script'lerini çoğu IP'de **403** ile blokluyor. Bu yüzden araç **gerçek bir tarayıcı (Playwright)** kullanır: normal Reddit sayfasına uğrar, sonra `.json` adreslerinden veriyi okur.
 
-Yine de **"blocked by network security"** hatası alırsan IP'n Cloudflare'a takılıyordur. `.env`'de:
+### Otomatik cookie (block'u geçer)
 
-```env
-REDDIT_HEADLESS=0
+Araç **zaten login olduğun yerel tarayıcının** Reddit cookie'lerini otomatik okur ve enjekte eder — `make login` yapmana gerek yok. Hangi tarayıcı: `.env` içindeki `REDDIT_COOKIE_BROWSER` (`chrome/arc/brave/edge/vivaldi/firefox/safari`).
+
+> **Önemli:** Reddit **headless** tarayıcıyı `403` ile blokluyor. Çekim her zaman **görünür (headed)** çalışır — her `make run`'da kısa süre tarayıcı penceresi açılıp kapanır, bu normal.
+
+> **macOS:** İlk çalıştırmada tarayıcı cookie'lerini okumak için **Keychain izin penceresi** çıkar — **Allow**'a bas (tek seferlik). Cookie okunamazsa araç misafir moda düşer, uyarı basar (çökmez).
+
+### Login gerekirse (opsiyonel)
+
+Otomatik cookie de yetmezse (`All Reddit hosts returned a block page`), bir kere giriş yapmak çözer:
+
+```bash
+make login
 ```
 
-yaparsan görünür bir Chrome penceresi açılır — bu, bot tespitini geçme şansını artırır. Hâlâ olmuyorsa farklı bir ağ/VPN dene.
+Görünür tarayıcı açılır, giriş yap, terminale dönüp **Enter**'a bas. Oturum `.reddit_profile/` içine kaydedilir. Yine olmuyorsa farklı ağ/VPN dene.
 
 ## venv Moduna Geçme
 
-Komutları `python main.py ...` diye doğrudan çalıştırmak istersen önce sanal ortama girmen lazım. Bu, terminalini venv'in içine sokar; o oturumda `python` ve `pip` artık sistemdekini değil venv'dekini kullanır. Prompt'un başında `(venv)` görürsen içerdesin demektir.
+Komutları `python main.py ...` diye doğrudan çalıştıracaksan önce sanal ortama gir. Prompt başında `(venv)` görürsen içerdesin.
 
 ```bash
-# macOS / Linux
-source venv/bin/activate
-
-# Windows (PowerShell)
-venv\Scripts\Activate.ps1
-
-# Windows (cmd)
-venv\Scripts\activate.bat
+source venv/bin/activate          # macOS / Linux
+venv\Scripts\Activate.ps1         # Windows (PowerShell)
+deactivate                        # çıkış
 ```
 
-Çıkmak için:
-
-```bash
-deactivate
-```
-
-Not: Makefile hedefleri (`make run` vb.) venv'i kendisi bulur — onlar için aktivasyona gerek yok. Aktivasyon sadece komutları elle çalıştıracaksan gerekli.
+Not: Makefile hedefleri (`make run` vb.) venv'i kendi bulur — onlar için aktivasyon gerekmez.
 
 ## Makefile Nasıl Kullanılır
 
-Projeyi Makefile üzerinden yönetirsin; venv'i elle açıp komut ezberlemene gerek kalmaz. Üç temel iş var: kurmak, çalıştırmak, temizlemek.
+Üç temel iş: kurmak, çalıştırmak, temizlemek.
 
-İlk adım kurulum hedefidir. Bu hedef sanal ortamı yaratır ve `requirements.txt` içindeki tüm bağımlılıkları yükler. Repoyu klonladıktan sonra tek sefer çalıştırman yeterli.
-
-İkinci adım çalıştırma hedefidir. Burada `q` parametresi zorunludur — arama kelimeni buraya yazarsın. `q` vermezsen Makefile çalışmaz, sana kullanım mesajı basıp durur. İki opsiyonel parametre daha var: `LIMIT` kaç sonuç döneceğini belirler (vermezsen 10 kabul edilir), `AI` parametresine `1` verirsen OpenAI devreye girer ve hem aramayı akıllandırır hem sonuçları özetler. `AI` vermezsen düz arama yapar.
-
-Parametreleri hedefin yanına `isim=değer` biçiminde eklersin; sırası önemli değil. Kelimede boşluk varsa tırnak içine al.
-
-Üçüncü adım temizleme hedefidir. Sanal ortamı ve Python cache klasörlerini siler; sıfırdan kurmak ya da repoyu küçültmek istediğinde işine yarar.
+`make run` hedefinde `q` parametresi **zorunlu** — arama kelimen. İki opsiyonel parametre: `LIMIT` kaç Reddit sonucu çekileceği (default 10), `TOPICS` kaç blog konusu üretileceği (default 10). Parametreleri `isim=değer` biçiminde eklersin; kelimede boşluk varsa tırnak içine al.
 
 ### Parametreler
 
-| Parametre | Açıklama                  | Default |
-|-----------|---------------------------|---------|
-| `q`       | Arama kelimesi (zorunlu)  | —       |
-| `LIMIT`   | Sonuç sayısı              | 10      |
-| `AI=1`    | OpenAI'yi aç              | kapalı  |
+| Parametre  | Açıklama                       | Default |
+|------------|--------------------------------|---------|
+| `q`        | Arama kelimesi (zorunlu)       | —       |
+| `LIMIT`    | Çekilecek Reddit sonuç sayısı  | 10      |
+| `TOPICS`   | Üretilecek blog konusu sayısı  | 10      |
 
 ### Hedefler
 
-| Hedef        | Ne yapar                        |
-|--------------|---------------------------------|
-| `make setup` | venv kur + bağımlılıkları yükle |
-| `make run`   | Arama çalıştır (`q` zorunlu)    |
-| `make clean` | venv + `__pycache__` sil        |
+| Hedef        | Ne yapar                                 |
+|--------------|------------------------------------------|
+| `make setup` | venv + paketler + browser kur            |
+| `make login` | Reddit'e giriş (opsiyonel, blok yersen)  |
+| `make run`   | Araştır + blog konuları üret (`q` zorunlu)|
+| `make clean` | venv + `__pycache__` sil                 |
 
 ## Kullanım Örnekleri
 
 Makefile ile:
 
 ```bash
-# En basit: tek kelime, düz arama
-make run q="python"
+# En basit: 10 sonuç, 10 blog konusu
+make run q="instagram dm automation"
 
 # Çok kelimeli arama (tırnak şart)
 make run q="machine learning"
 
-# Sonuç sayısını sınırla
-make run q="bitcoin" LIMIT=5
-
-# OpenAI ile akıllı arama + özet
-make run q="rust vs go" AI=1
-
-# Hepsi birden
-make run q="indie game dev" LIMIT=3 AI=1
+# Reddit sonuç ve konu sayısını ayarla
+make run q="bitcoin" LIMIT=15 TOPICS=8
 ```
 
 Doğrudan Python ile (önce venv'e gir):
@@ -111,33 +109,36 @@ Doğrudan Python ile (önce venv'e gir):
 ```bash
 source venv/bin/activate
 
-python main.py "python"                            # düz arama
-python main.py "bitcoin" --limit 5                 # sonuç sınırlı
-python main.py "rust vs go" --ai                   # OpenAI akıllı arama + özet
-python main.py "indie game dev" --limit 3 --ai     # hepsi birden
+python main.py "instagram dm automation"                  # 10 konu
+python main.py "bitcoin" --limit 15 --topics 8            # ayarlı
 ```
 
 ## Çıktı
 
-Her arama sonucu `result/<kelime>.json` olarak yazılır. JSON içinde: orijinal kelime, optimize sorgu, subreddit listesi, gönderiler ve (varsa) OpenAI özeti bulunur.
+Her çalıştırma `result/<kelime>.md` olarak yazılır. Markdown içinde:
+
+- `# Blog Topic Ideas: <kelime>` başlığı + optimize sorgu
+- Numaralı **10 blog konusu** — her biri başlık + 1-2 cümle açıklama (`OUTPUT_LANG` dilinde)
+- **Sources (Reddit)** — konuların türetildiği gerçek Reddit gönderilerinin linkleri
 
 ## Yapı
 
 ```
 reddit-ai-scout/
 ├── src/
-│   ├── reddit_client.py   # Reddit scraper (Playwright browser)
-│   ├── openai_client.py   # OpenAI akıllı arama/özet
+│   ├── reddit_client.py   # Reddit scraper (Playwright + tarayıcı cookie enjekte)
+│   ├── openai_client.py   # Sorgu optimize + blog konusu üretimi
+│   ├── login.py           # Bir kerelik Reddit girişi (opsiyonel)
 │   └── config.py          # .env yükleme
-├── main.py                # Giriş noktası
-├── result/                # Arama çıktıları (<kelime>.json)
-├── Makefile               # setup / run / clean
+├── main.py                # Giriş noktası — araştır + .md üret
+├── result/                # Çıktılar (<kelime>.md)
+├── Makefile               # setup / login / run / clean
 └── requirements.txt
 ```
 
 ## Notlar
 
-- Reddit verisi gerçek tarayıcı (Playwright) ile çekilir — OAuth/şifre yok. `make setup` browser'ı da indirir; elle kurarken `playwright install chromium` çalıştır.
-- Blok yersen `.env`'de `REDDIT_HEADLESS=0` dene, sonra farklı ağ/VPN.
-- OpenAI opsiyonel: `--ai`/`AI=1` + `.env`'de anahtar varsa devreye girer, yoksa düz arama yapar.
-- `.env` git'e girmez (`.gitignore` korur). Sırlar tek yerde (`src/config.py`).
+- Reddit verisi gerçek tarayıcı (Playwright) ile çekilir — OAuth/API anahtarı yok. `make setup` browser'ı da indirir; elle kurarken `playwright install chromium` çalıştır.
+- OpenAI **zorunlu**: `.env`'de `OPENAI_API_KEY` yoksa araç hata verip durur.
+- Çıktı dili `OUTPUT_LANG` ile belirlenir (örn. `tr_TR` → Türkçe). Reddit araması orijinal kalır, sadece üretilen blog konuları çevrilir.
+- `.env` ve `.reddit_profile/` git'e girmez (`.gitignore` korur).

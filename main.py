@@ -1,6 +1,9 @@
-"""Reddit AI Scout — fetches Reddit data for a keyword, enriched with OpenAI."""
+"""Reddit AI Scout — keyword -> Reddit research -> 10 blog topic ideas (Markdown).
+
+OpenAI is required: the query is optimized, Reddit is scraped, then OpenAI turns
+the real discussions into blog topic ideas. Output is a Markdown file.
+"""
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -18,33 +21,62 @@ def _slugify(text: str) -> str:
     return slug or "query"
 
 
-def save_result(keyword: str, data: dict) -> Path:
-    """Write the result to result/<keyword>.json."""
+def build_markdown(keyword: str, query: str, topics: list[dict], posts: list[dict]) -> str:
+    """Render the blog topics (and source posts) as a Markdown document."""
+    lines = [
+        f"# Blog Topic Ideas: {keyword}",
+        "",
+        f"_Optimized query: `{query}` — {len(topics)} ideas from Reddit discussions._",
+        "",
+        "## Topics",
+        "",
+    ]
+    for i, t in enumerate(topics, 1):
+        lines.append(f"### {i}. {t['title']}")
+        lines.append("")
+        lines.append(t["description"])
+        lines.append("")
+
+    lines.append("## Sources (Reddit)")
+    lines.append("")
+    for p in posts:
+        lines.append(f"- [{p['title']}]({p['url']}) — r/{p['subreddit']} ({p['score']} pts)")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_markdown(keyword: str, content: str) -> Path:
+    """Write the result to result/<keyword>.md."""
     RESULT_DIR.mkdir(exist_ok=True)
-    path = RESULT_DIR / f"{_slugify(keyword)}.json"
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    path = RESULT_DIR / f"{_slugify(keyword)}.md"
+    path.write_text(content, encoding="utf-8")
     return path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Reddit AI Scout")
+    parser = argparse.ArgumentParser(
+        description="Reddit AI Scout — keyword -> 10 blog topic ideas (Markdown)"
+    )
     parser.add_argument("keyword", help="Search keyword")
-    parser.add_argument("--limit", type=int, default=10, help="Number of results")
+    parser.add_argument("--limit", type=int, default=10, help="Number of Reddit results")
     parser.add_argument(
-        "--ai", action="store_true", help="Smart search + summary via OpenAI"
+        "--topics", type=int, default=10, help="Number of blog topic ideas"
     )
     args = parser.parse_args()
 
-    query = args.keyword
+    # OpenAI is required for this tool.
+    if not OPENAI_API_KEY:
+        print(
+            "[error] OPENAI_API_KEY missing. Copy .env.example to .env and add your key.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    # Expand the query with OpenAI (only if key is set and --ai is given)
-    if args.ai and OPENAI_API_KEY:
-        query = openai_client.expand_query(args.keyword)
-        print(f"[OpenAI] Optimized query: {query}\n")
-    elif args.ai:
-        print("[Warning] OPENAI_API_KEY missing, running plain search.\n")
+    # Optimize the keyword into a better Reddit query.
+    query = openai_client.expand_query(args.keyword)
+    print(f"[OpenAI] Optimized query: {query}\n")
 
-    # Fetch via headless browser (single session)
+    # Fetch Reddit data (single headed browser session).
     try:
         subreddits, posts = reddit_client.search(query, args.limit)
     except Exception as e:
@@ -56,33 +88,23 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print("=== Subreddits ===")
-    for sub in subreddits:
-        print(f"  r/{sub['name']} — {sub['subscribers']} subscribers")
+    if not posts:
+        print("[error] No Reddit posts found — cannot generate topics.", file=sys.stderr)
+        sys.exit(1)
 
-    print("\n=== Posts ===")
-    for p in posts:
-        print(f"  [{p['score']}] {p['title']}\n      {p['url']}")
+    print(f"[reddit] {len(posts)} posts across {len(subreddits)} subreddits\n")
 
-    # Collected data
-    result = {
-        "keyword": args.keyword,
-        "query": query,
-        "limit": args.limit,
-        "subreddits": subreddits,
-        "posts": posts,
-        "summary": None,
-    }
+    # Generate blog topic ideas from the real discussions.
+    print(f"[OpenAI] Generating {args.topics} blog topics...\n")
+    topics = openai_client.generate_blog_topics(args.keyword, posts, count=args.topics)
 
-    # OpenAI summary
-    if args.ai and OPENAI_API_KEY and posts:
-        print("\n=== OpenAI Summary ===")
-        summary = openai_client.summarize_results(args.keyword, posts)
-        print(summary)
-        result["summary"] = summary
+    print("=== Blog Topics ===")
+    for i, t in enumerate(topics, 1):
+        print(f"  {i}. {t['title']}\n     {t['description']}")
 
-    # Write to result/<keyword>.json
-    path = save_result(args.keyword, result)
+    # Write Markdown output.
+    md = build_markdown(args.keyword, query, topics, posts)
+    path = save_markdown(args.keyword, md)
     print(f"\n[saved] {path}")
 
 

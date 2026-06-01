@@ -7,8 +7,16 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-# Browser görünür mü? Blok yersen REDDIT_HEADLESS=0 dene (gerçek pencere açar)
-REDDIT_HEADLESS = os.getenv("REDDIT_HEADLESS", "1") not in ("0", "false", "False")
+# Kalıcı browser profili — bir kere login olunca cookie burada saklanır
+REDDIT_PROFILE_DIR = os.getenv("REDDIT_PROFILE_DIR", ".reddit_profile")
+
+# Hangi yerel tarayıcıdan Reddit cookie'si okunacak (chrome/brave/edge/firefox/safari)
+REDDIT_COOKIE_BROWSER = os.getenv("REDDIT_COOKIE_BROWSER", "chrome")
+# Cookie'leri hangi domain için okuyalım
+REDDIT_COOKIE_DOMAIN = os.getenv("REDDIT_COOKIE_DOMAIN", "reddit.com")
+
+# Çıktı (blog konuları) hangi dilde üretilsin — locale kodu, örn: en_US, tr_TR
+OUTPUT_LANG = os.getenv("OUTPUT_LANG", "en_US")
 
 
 def require_openai_key() -> str:

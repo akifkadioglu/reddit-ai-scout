@@ -6,6 +6,12 @@ env/
 # Çevre değişkenleri — SIRLAR
 .env
 
+# Reddit browser profili (login cookie'leri) — gizli kalmalı
+.reddit_profile/
+
+# Arama çıktıları
+result/
+
 # Python cache
 __pycache__/
 *.py[cod]
