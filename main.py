@@ -53,6 +53,30 @@ def save_markdown(keyword: str, content: str) -> Path:
     return path
 
 
+def build_raw_markdown(keyword: str, query: str, subreddits: list[dict], posts: list[dict]) -> str:
+    """Render raw Reddit research (no AI) as Markdown for an external LLM to use."""
+    lines = [
+        f"# Reddit Research: {keyword}",
+        "",
+        f"_Query: `{query}` — {len(posts)} posts across {len(subreddits)} subreddits. "
+        "No AI applied; topic ideas are generated downstream._",
+        "",
+        "## Posts",
+        "",
+    ]
+    for p in posts:
+        lines.append(f"- [{p['title']}]({p['url']}) — r/{p['subreddit']} ({p['score']} pts)")
+    lines.append("")
+    lines.append("## Subreddits")
+    lines.append("")
+    for s in subreddits:
+        subs = s.get("subscribers")
+        desc = s.get("description") or ""
+        lines.append(f"- r/{s['name']} ({subs} subs) — {desc}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Reddit AI Scout — keyword -> 10 blog topic ideas (Markdown)"
@@ -62,9 +86,37 @@ def main() -> None:
     parser.add_argument(
         "--topics", type=int, default=10, help="Number of blog topic ideas"
     )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Reddit-only mode: no OpenAI. Fetch posts and dump them so an "
+        "external LLM (e.g. Claude) does query expansion + topic generation.",
+    )
     args = parser.parse_args()
 
-    # OpenAI is required for this tool.
+    # --raw: skip OpenAI entirely. The keyword is used directly as the query.
+    if args.raw:
+        query = args.keyword
+        try:
+            subreddits, posts = reddit_client.search(query, args.limit)
+        except Exception as e:
+            print(f"\n[error] Reddit fetch failed: {e}", file=sys.stderr)
+            print(
+                "If this is the first run, install the browser with: "
+                "python -m playwright install chromium",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not posts:
+            print("[error] No Reddit posts found.", file=sys.stderr)
+            sys.exit(1)
+        md = build_raw_markdown(args.keyword, query, subreddits, posts)
+        path = save_markdown(args.keyword, md)
+        print(f"[reddit] {len(posts)} posts across {len(subreddits)} subreddits")
+        print(f"[saved] {path}")
+        return
+
+    # OpenAI is required for the default (AI) mode.
     if not OPENAI_API_KEY:
         print(
             "[error] OPENAI_API_KEY missing. Copy .env.example to .env and add your key.",

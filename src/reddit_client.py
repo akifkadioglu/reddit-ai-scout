@@ -21,6 +21,13 @@ BASE_URL = "https://www.reddit.com"
 # Sirayla denenecek host'lar — biri bloklarsa digerine gec
 HOSTS = ["https://www.reddit.com", "https://old.reddit.com"]
 
+# Headless Chrome'un UA'sinda "HeadlessChrome" gecer -> Reddit blokluyor.
+# Normal Chrome UA'si ile maskele ki headless'da da 403 yemeyelim.
+_REAL_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
 
 def load_browser_cookies() -> list[dict]:
     """Yerel tarayıcıdan Reddit cookie'lerini oku, Playwright formatına çevir.
@@ -57,11 +64,18 @@ def load_browser_cookies() -> list[dict]:
 
 
 def open_context(p, headless: bool = True):
-    """Kalıcı profille bir browser context aç. Gerçek Chrome > paketli chromium."""
+    """Kalıcı profille bir browser context aç. Gerçek Chrome > paketli chromium.
+
+    UA maskesi + automation flag kapatma sayesinde headless'da da Reddit blok yemez.
+    """
+    common = {
+        "user_agent": _REAL_UA,
+        "args": ["--disable-blink-features=AutomationControlled"],
+    }
     for kwargs in ({"channel": "chrome"}, {}):
         try:
             return p.chromium.launch_persistent_context(
-                REDDIT_PROFILE_DIR, headless=headless, **kwargs
+                REDDIT_PROFILE_DIR, headless=headless, **common, **kwargs
             )
         except Exception:
             continue
@@ -90,8 +104,8 @@ def _fetch_endpoints(paths_params: list[tuple[str, dict]]) -> list[dict]:
     """Tek browser oturumunda birden çok .json endpoint çek."""
     results: list[dict] = []
     with sync_playwright() as p:
-        # Reddit headless'i 403 blokluyor -> her zaman gorunur (headed) cek
-        ctx = open_context(p, headless=False)
+        # UA maskesi sayesinde headless'da da blok yemiyoruz -> pencere acilmaz
+        ctx = open_context(p, headless=True)
         # Logged-in cookie'leri yerel tarayıcıdan enjekte et -> block'u gec
         cookies = load_browser_cookies()
         if cookies:

@@ -12,7 +12,7 @@ q ?=
 LIMIT ?= 10
 TOPICS ?= 10
 
-.PHONY: setup login run clean
+.PHONY: setup login run run-raw clean
 
 setup:
 	python3 -m venv venv
@@ -27,6 +27,11 @@ login:
 run:
 	@test -n "$(q)" || { echo "usage: make run q=\"keyword\" [LIMIT=5] [TOPICS=10]"; exit 1; }
 	$(PY) main.py "$(q)" --limit $(LIMIT) --topics $(TOPICS)
+
+# OpenAI'siz: sadece Reddit postlarini ceker (topic uretmez). /generate-blog ile ayni mantik.
+run-raw:
+	@test -n "$(q)" || { echo "usage: make run-raw q=\"keyword\" [LIMIT=10]"; exit 1; }
+	$(PY) main.py "$(q)" --limit $(LIMIT) --raw
 
 clean:
 	rm -rf venv **/__pycache__ __pycache__
