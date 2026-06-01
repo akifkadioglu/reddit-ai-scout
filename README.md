@@ -1,17 +1,18 @@
 # Reddit AI Scout
 
-Kullanıcının girdiği kelimeye göre Reddit'ten veri çeker. Opsiyonel OpenAI desteğiyle akıllı arama + özet.
+Kullanıcının girdiği kelimeye göre Reddit'ten veri çeker. Opsiyonel OpenAI desteğiyle akıllı arama + özet. Sonuçları `result/<kelime>.json` olarak kaydeder.
 
 ## Kurulum
 
 ```bash
-# Makefile ile (önerilen)
+# Makefile ile (önerilen) — venv + paketler + browser indirir
 make setup
 
 # veya elle
 python3 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+playwright install chromium       # Reddit erişimi icin browser
 ```
 
 Sırlar:
@@ -20,6 +21,41 @@ Sırlar:
 cp .env.example .env              # Windows: copy .env.example .env
 # .env içine OPENAI_API_KEY yaz
 ```
+
+## Reddit'e Nasıl Erişiyor
+
+Reddit, düz HTTP script'lerini (`requests`) çoğu IP'de **403** ile blokluyor. Bu yüzden veri **gerçek bir tarayıcı (Playwright)** üzerinden çekiliyor: araç headless Chrome açar, `reddit.com`'dan misafir oturum çerezi alır, sonra `.json` adreslerine gidip veriyi okur. OAuth/şifre gerekmez.
+
+Yine de **"blocked by network security"** hatası alırsan IP'n Cloudflare'a takılıyordur. `.env`'de:
+
+```env
+REDDIT_HEADLESS=0
+```
+
+yaparsan görünür bir Chrome penceresi açılır — bu, bot tespitini geçme şansını artırır. Hâlâ olmuyorsa farklı bir ağ/VPN dene.
+
+## venv Moduna Geçme
+
+Komutları `python main.py ...` diye doğrudan çalıştırmak istersen önce sanal ortama girmen lazım. Bu, terminalini venv'in içine sokar; o oturumda `python` ve `pip` artık sistemdekini değil venv'dekini kullanır. Prompt'un başında `(venv)` görürsen içerdesin demektir.
+
+```bash
+# macOS / Linux
+source venv/bin/activate
+
+# Windows (PowerShell)
+venv\Scripts\Activate.ps1
+
+# Windows (cmd)
+venv\Scripts\activate.bat
+```
+
+Çıkmak için:
+
+```bash
+deactivate
+```
+
+Not: Makefile hedefleri (`make run` vb.) venv'i kendisi bulur — onlar için aktivasyona gerek yok. Aktivasyon sadece komutları elle çalıştıracaksan gerekli.
 
 ## Makefile Nasıl Kullanılır
 
@@ -70,44 +106,38 @@ make run q="rust vs go" AI=1
 make run q="indie game dev" LIMIT=3 AI=1
 ```
 
-Doğrudan Python ile:
+Doğrudan Python ile (önce venv'e gir):
 
 ```bash
-# Önce ortamı aç
 source venv/bin/activate
 
-# Düz arama
-python main.py "python"
-
-# Sonuç sınırlı
-python main.py "bitcoin" --limit 5
-
-# OpenAI akıllı arama + özet
-python main.py "rust vs go" --ai
-
-# Hepsi birden
-python main.py "indie game dev" --limit 3 --ai
+python main.py "python"                            # düz arama
+python main.py "bitcoin" --limit 5                 # sonuç sınırlı
+python main.py "rust vs go" --ai                   # OpenAI akıllı arama + özet
+python main.py "indie game dev" --limit 3 --ai     # hepsi birden
 ```
 
-## Doğrudan Python ile
+## Çıktı
 
-Makefile kullanmak istemezsen önce `source venv/bin/activate` ile ortamı aç, sonra `main.py`'yi kelimeyle çağır. `--limit` ile sonuç sayısını, `--ai` bayrağıyla OpenAI desteğini kontrol edersin.
+Her arama sonucu `result/<kelime>.json` olarak yazılır. JSON içinde: orijinal kelime, optimize sorgu, subreddit listesi, gönderiler ve (varsa) OpenAI özeti bulunur.
 
 ## Yapı
 
 ```
 reddit-ai-scout/
 ├── src/
-│   ├── reddit_client.py   # Reddit public JSON API
+│   ├── reddit_client.py   # Reddit scraper (Playwright browser)
 │   ├── openai_client.py   # OpenAI akıllı arama/özet
 │   └── config.py          # .env yükleme
 ├── main.py                # Giriş noktası
+├── result/                # Arama çıktıları (<kelime>.json)
 ├── Makefile               # setup / run / clean
 └── requirements.txt
 ```
 
 ## Notlar
 
-- Reddit public JSON = OAuth yok, sadece `User-Agent` lazım. Ağır kullanım için resmi OAuth + PRAW geç.
+- Reddit verisi gerçek tarayıcı (Playwright) ile çekilir — OAuth/şifre yok. `make setup` browser'ı da indirir; elle kurarken `playwright install chromium` çalıştır.
+- Blok yersen `.env`'de `REDDIT_HEADLESS=0` dene, sonra farklı ağ/VPN.
 - OpenAI opsiyonel: `--ai`/`AI=1` + `.env`'de anahtar varsa devreye girer, yoksa düz arama yapar.
 - `.env` git'e girmez (`.gitignore` korur). Sırlar tek yerde (`src/config.py`).

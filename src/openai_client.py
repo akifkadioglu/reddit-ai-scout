@@ -1,16 +1,16 @@
-"""OpenAI API istemcisi — arama kelimesini akıllıca genişletir/özetler."""
+"""OpenAI API client — expands and summarizes search queries."""
 from openai import OpenAI
 
 from .config import require_openai_key, OPENAI_MODEL
 
 
 def _get_client() -> OpenAI:
-    """OpenAI istemcisini anahtarla başlat."""
+    """Initialize the OpenAI client with the API key."""
     return OpenAI(api_key=require_openai_key())
 
 
 def expand_query(keyword: str) -> str:
-    """Kullanıcı kelimesini Reddit araması için iyi sorguya çevir."""
+    """Turn the user's keyword into a better Reddit search query."""
     client = _get_client()
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
@@ -18,9 +18,10 @@ def expand_query(keyword: str) -> str:
             {
                 "role": "user",
                 "content": (
-                    f"Kullanıcı '{keyword}' arıyor. Reddit'te en alakalı sonuçları "
-                    f"bulmak için kısa, optimize bir arama sorgusu üret. "
-                    f"Sadece sorguyu döndür, açıklama yok."
+                    f"The user is searching for '{keyword}'. Produce a short, "
+                    f"optimized keyword query for Reddit's own search. Use plain "
+                    f"keywords only — no search operators like site:, quotes, or "
+                    f"boolean. Return only the query, no explanation."
                 ),
             }
         ],
@@ -29,7 +30,7 @@ def expand_query(keyword: str) -> str:
 
 
 def summarize_results(keyword: str, posts: list[dict]) -> str:
-    """Reddit sonuçlarını OpenAI ile özetle."""
+    """Summarize Reddit results with OpenAI."""
     client = _get_client()
     titles = "\n".join(f"- {p['title']} (r/{p['subreddit']})" for p in posts)
     resp = client.chat.completions.create(
@@ -38,8 +39,8 @@ def summarize_results(keyword: str, posts: list[dict]) -> str:
             {
                 "role": "user",
                 "content": (
-                    f"Kullanıcı '{keyword}' hakkında araştırıyor. "
-                    f"Şu Reddit başlıklarına göre kısa Türkçe özet çıkar:\n\n{titles}"
+                    f"The user is researching '{keyword}'. Write a short summary "
+                    f"based on these Reddit post titles:\n\n{titles}"
                 ),
             }
         ],

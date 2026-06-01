@@ -6,13 +6,15 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "reddit-ai-scout/0.1")
+
+# Browser görünür mü? Blok yersen REDDIT_HEADLESS=0 dene (gerçek pencere açar)
+REDDIT_HEADLESS = os.getenv("REDDIT_HEADLESS", "1") not in ("0", "false", "False")
 
 
 def require_openai_key() -> str:
-    """OpenAI anahtarı yoksa net hata fırlat."""
+    """Raise a clear error if the OpenAI key is missing."""
     if not OPENAI_API_KEY:
         raise RuntimeError(
-            ".env içinde OPENAI_API_KEY yok. .env.example'ı kopyala ve doldur."
+            "OPENAI_API_KEY missing in .env. Copy .env.example and fill it in."
         )
     return OPENAI_API_KEY
