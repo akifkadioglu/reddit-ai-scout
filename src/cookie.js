@@ -29,10 +29,10 @@ const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 function cacheDir() {
   if (process.platform === "win32") {
     const base = process.env.LOCALAPPDATA || tmpdir();
-    return join(base, "reddit-ai-scout");
+    return join(base, "reddit-blog-scout");
   }
   const base = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
-  return join(base, "reddit-ai-scout");
+  return join(base, "reddit-blog-scout");
 }
 
 function cachePath() {

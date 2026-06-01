@@ -1,7 +1,7 @@
 {
-  "name": "reddit-ai-scout",
-  "version": "1.0.0",
-  "description": "Keyword -> Reddit research (real posts + subreddits) as Markdown. Puppeteer-based, beats Reddit's 403 anti-bot. Feeds /generate-blog topic discovery.",
+  "name": "reddit-blog-scout",
+  "version": "1.0.1",
+  "description": "Mine Reddit discussions for blog topic ideas: keyword -> real posts + subreddits as Markdown. Headless-Chrome cookie harvest beats Reddit's 403 anti-bot, then plain fetch. Feeds /generate-blog.",
   "type": "module",
   "main": "src/reddit.js",
   "exports": {
@@ -25,6 +25,17 @@
   "keywords": ["reddit", "scraper", "puppeteer", "seo", "blog", "research"],
   "author": "Akif <hello@akifkadioglu.dev>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akifkadioglu/reddit-ai-scout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akifkadioglu/reddit-ai-scout/issues"
+  },
+  "homepage": "https://github.com/akifkadioglu/reddit-ai-scout#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",

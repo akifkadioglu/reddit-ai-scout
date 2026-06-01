@@ -67,7 +67,7 @@ Tanım: `.claude/commands/generate-blog.md`. Üstündeki **CONFIG** bloğunu dol
 
 Reddit, düz HTTP isteklerini çoğu IP'de **403** ile blokluyor (stdlib `urllib` de, node `fetch` de). Araç bunu iki adımda aşar:
 
-1. **Cookie hasadı (headless Chrome).** Bir kez headless Chrome (Puppeteer + stealth) reddit.com'a uğrar ve **guest cookie**'yi `page.cookies()` ile (httpOnly dahil) toplar. Cookie OS cache dizinine yazılır (`~/.cache/reddit-ai-scout/cookie.json`, Windows'ta `%LOCALAPPDATA%`). Consumer repo'su kirlenmez.
+1. **Cookie hasadı (headless Chrome).** Bir kez headless Chrome (Puppeteer + stealth) reddit.com'a uğrar ve **guest cookie**'yi `page.cookies()` ile (httpOnly dahil) toplar. Cookie OS cache dizinine yazılır (`~/.cache/reddit-blog-scout/cookie.json`, Windows'ta `%LOCALAPPDATA%`). Consumer repo'su kirlenmez.
 2. **İstekler (plain fetch).** Sonraki tüm aramalar düz `fetch` ile, cookie header'ı + aynı Chrome UA'sı kullanılarak yapılır — tarayıcı açılmaz, hızlıdır. Cookie `REDDIT_COOKIE_TTL_MS` (default 6 saat) sonrası bayatlayınca otomatik yeniden hasat edilir.
 
 > **Not:** Reddit `HeadlessChrome` UA'sını blokluyor; hasat hem de fetch aynı normal Chrome UA'sını kullanır (UA tutarsızlığı tek başına 403 sebebi).
@@ -77,11 +77,11 @@ Bir istek blok yerse (JSON yerine HTML duvar) cookie **bir kez** zorla yenilenip
 ## Programatik Kullanım (devDependency)
 
 ```bash
-npm i -D reddit-ai-scout
+npm i -D reddit-blog-scout
 ```
 
 ```js
-import { search } from "reddit-ai-scout";
+import { search } from "reddit-blog-scout";
 
 const { subreddits, posts } = await search("instagram dm automation", 10);
 // posts:      [{ title, subreddit, score, url }, ...]
@@ -105,7 +105,7 @@ Gemini `gemini-2.5-flash-image` (Nano Banana) ile üretir, `OUT` zaten varsa atl
 ## Yapı
 
 ```
-reddit-ai-scout/
+reddit-blog-scout/
 ├── .claude/commands/
 │   └── generate-blog.md       # /generate-blog komutu (CONFIG + kurallar)
 ├── bin/

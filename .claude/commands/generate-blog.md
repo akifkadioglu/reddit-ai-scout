@@ -80,16 +80,16 @@ Before writing ANY blog content, run this conversational intake. Ask one thing, 
 STEP 1 — Research Reddit for topic options:
 
 - First, expand the user's keyword into a tight Reddit search query YOURSELF (plain keywords, no operators). No external LLM is needed; you do this.
-- Run the Reddit scout (the `reddit-ai-scout` npm package) with that query:
+- Run the Reddit scout (the `reddit-blog-scout` npm package) with that query:
 
   npx reddit-scout "<expanded query>" --limit 10
 
   (if deps are missing, run `npm i` first in the project root)
 - The scout only scrapes Reddit (no AI/OpenAI). It writes `.previous/<slug>.md` with the real post titles + subreddits.
 - Read that file. From those real discussions, YOU generate 4 blog topic ideas (catchy title + 1-line description each), in the article's target language. This is your job, not a Python script's. (4, because the topic picker is arrow-key navigable and caps at 4 options.)
-- If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics. If the scout reports a block page, tell the user to run `npx reddit-scout login` once, then retry.
+- If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics. If the scout reports a block page, the IP is anti-bot flagged (datacenter/VPN); tell the user to retry on a clean network. There is no interactive login fallback.
 
-NOTE ON KEYS: This command does NOT need `OPENAI_API_KEY`. Query expansion and topic generation are done by you (Claude). The `reddit-scout` npm CLI (Puppeteer) is used only to scrape Reddit. (`GEMINI_API_KEY` is still required, but only later for the image-generation step.)
+NOTE ON KEYS: This command does NOT need `OPENAI_API_KEY`. Query expansion and topic generation are done by you (Claude). The `reddit-scout` CLI (from `reddit-blog-scout`, Puppeteer) is used only to scrape Reddit. (`GEMINI_API_KEY` is still required, but only later for the image-generation step.)
 
 STEP 2 — Let the user pick ONE topic:
 
@@ -387,7 +387,7 @@ PROMPT and OUT.
 PATH MAPPING: a markdown path `/images/blogs/<...>.jpg` maps to the file `public/images/blogs/<...>.jpg` (strip the
 leading slash, prefix with `public/`).
 
-`blog-image` (from the `reddit-ai-scout` npm package) reads `GEMINI_API_KEY`, `IMG_ASPECT`, `IMG_WIDTH`, `IMG_HEIGHT`
+`blog-image` (from the `reddit-blog-scout` npm package) reads `GEMINI_API_KEY`, `IMG_ASPECT`, `IMG_WIDTH`, `IMG_HEIGHT`
 from `.env` (with sane defaults), calls Gemini (`gemini-2.5-flash-image` / Nano Banana), and writes the `.jpg`. Existing
 files are skipped (idempotent).
 
