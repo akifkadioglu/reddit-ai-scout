@@ -46,6 +46,7 @@ CATEGORY_WHITELIST — allowed `categoryKey` values (do not invent others):
 - IMAGE_AVOID: no text, no logos, no watermarks, no external placeholder URLs
 - COVER_REQUIRED: yes (declared in frontmatter `cover`, prompted via IMAGE_TARGET)
 - IMAGE_PROMPT_LENGTH: 80 to 200 words, self-contained
+- IMAGE_MAX_KB: 200 (every generated `.jpg` MUST be ≤ 200 KB on disk)
 - IMAGE_ENV (read from `.env` by `blog-image`, sane defaults if unset): GEMINI_API_KEY (required), IMG_ASPECT=16:9, IMG_WIDTH=1200, IMG_HEIGHT=630
 
 ## Paths
@@ -357,6 +358,29 @@ npx blog-image
 - If deps are missing, run `npm i` first in the project root.
 - `sips` is macOS-only; on other systems the image stays at the requested aspect ratio (close to target) — that is fine.
 
+## Compress to IMAGE_MAX_KB (mandatory action)
+
+`blog-image` does NOT cap file size. After EACH `.jpg` is generated, enforce IMAGE_MAX_KB:
+shrink any file over 200 KB by re-encoding at lower JPEG quality until it fits, then verify.
+
+For EACH generated `.jpg`, run:
+
+```bash
+F='public/images/blogs/<...>.jpg'
+for q in 80 70 60 50 40 30; do
+  [ "$(stat -f%z "$F" 2>/dev/null || stat -c%s "$F")" -le 204800 ] && break
+  if command -v sips >/dev/null; then sips -s format jpeg -s formatOptions "$q" "$F" --out "$F" >/dev/null 2>&1
+  elif command -v magick >/dev/null; then magick "$F" -quality "$q" "$F"
+  else convert "$F" -quality "$q" "$F"; fi
+done
+ls -l "$F" | awk '{print $5, $9}'
+```
+
+- 204800 bytes = 200 KB. Loop drops quality until the file fits; stops early once ≤ 200 KB.
+- Run for EVERY image (cover + all in-content) in EVERY md file.
+- If a file is still > 200 KB after quality 30, also reduce dimensions (e.g. `sips --resampleWidth 1000 "$F"`) and re-run the loop.
+- Final state: NO blog `.jpg` may exceed IMAGE_MAX_KB.
+
 # Output
 
 - Write the markdown blog post file(s) to BLOG_OUTPUT_PATH.
@@ -379,3 +403,4 @@ Examples:
 - [ ] BRAND_NAME mentioned per BRAND_MENTION_FREQUENCY
 - [ ] IMAGE_COUNT images, each with IMAGE_PROMPT; cover has IMAGE_TARGET + IMAGE_PROMPT at top
 - [ ] Every image generated via `blog-image` to its IMAGE_PUBLIC_PATH
+- [ ] Every generated `.jpg` ≤ IMAGE_MAX_KB (200 KB), verified on disk
