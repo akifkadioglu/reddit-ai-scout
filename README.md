@@ -1,100 +1,47 @@
-# Reddit AI Scout
+# reddit-blog-scout
 
-Bir kelimeyi Reddit'te araştırır, gerçek tartışmaları Markdown olarak döker; bu da SEO odaklı blog konusu keşfini besler. Tamamen JavaScript (npm paketi), Reddit'in 403 anti-bot bloğunu Puppeteer ile aşar.
+Mine Reddit discussions for blog topic ideas. Give it a keyword, get the real posts and
+subreddits back as Markdown, then feed that into SEO-focused blog topic discovery. Pure
+JavaScript (npm package). It beats Reddit's 403 anti-bot wall by harvesting a guest cookie
+with headless Chrome once, then making fast plain `fetch` requests with that cookie.
 
-İki kullanım yolu var:
+Two ways to use it:
 
-1. **`/generate-blog` (Claude command — ana yol)** — uçtan uca, interaktif. Reddit araştırması → konu seçimi → tam SEO blog + görseller. **OpenAI gerektirmez** (sorgu + konu üretimini Claude yapar). Görseller için `GEMINI_API_KEY` ister.
-2. **`reddit-scout` (standalone CLI)** — sadece Reddit'i araştırıp ham postları + subreddit'leri `.previous/<kelime>.md` olarak yazar. AI yok, anahtar gerekmez.
+1. **`/generate-blog` (Claude Code command — the main path)** — end-to-end and interactive: Reddit research → topic pick → full SEO blog + images. **No OpenAI** (Claude does query + topic generation). Needs `GEMINI_API_KEY` for images.
+2. **`reddit-scout` (standalone CLI / library)** — just scrapes Reddit and writes the raw posts + subreddits to `.previous/<keyword>.md`. No AI, no keys.
 
-## Kurulum
+## Install
 
 ```bash
-npm i                 # puppeteer + stealth + bundled Chromium indirir
-cp .env.example .env  # görseller için GEMINI_API_KEY yaz
+npm i -D reddit-blog-scout   # installs puppeteer + stealth + bundled Chromium
 ```
 
-Node >= 20.6 gerekir (`.env` için `process.loadEnvFile`).
+Requires Node >= 20.6 (uses `process.loadEnvFile` for `.env`).
 
 ## CLI
 
 ```bash
-npx reddit-scout "instagram dm automation"            # .previous/<kelime>.md yazar
+npx reddit-scout "instagram dm automation"          # writes .previous/<keyword>.md
 npx reddit-scout "bitcoin trading" --limit 15
 ```
 
-Çıktı `.previous/<kelime>.md`:
+Output `.previous/<keyword>.md`:
 
 ```
-# Reddit Research: <kelime>
+# Reddit Research: <keyword>
 
-_Query: `<sorgu>` — N posts across M subreddits. No AI applied; topic ideas are generated downstream._
+_Query: `<query>` — N posts across M subreddits. No AI applied; topic ideas are generated downstream._
 
 ## Posts
-- [başlık](url) — r/subreddit (skor pts)
+- [title](url) — r/subreddit (score pts)
 ...
 
 ## Subreddits
-- r/isim (abone subs) — açıklama
+- r/name (subscribers subs) — description
 ...
 ```
 
-## .env Değişkenleri
-
-| Değişken             | Açıklama                                          | Gerekli mi                 | Default          |
-|----------------------|---------------------------------------------------|----------------------------|------------------|
-| `GEMINI_API_KEY`     | Görsel üretimi — `/generate-blog` görsel adımı    | `/generate-blog` için evet | —                |
-| `IMG_ASPECT`         | Görsel en-boy oranı                               | Opsiyonel                  | `16:9`           |
-| `IMG_WIDTH`          | Görsel genişliği (px, macOS `sips` ile)           | Opsiyonel                  | `1200`           |
-| `IMG_HEIGHT`         | Görsel yüksekliği (px, macOS `sips` ile)          | Opsiyonel                  | `630`            |
-| `REDDIT_COOKIE_TTL_MS`| Guest cookie cache ömrü (ms)                     | Opsiyonel                  | `21600000` (6s)  |
-
-## `/generate-blog` Komutu (ana yol)
-
-`/generate-blog` bir **Claude Code komutudur**, npm paketine dahil DEĞİLDİR (`npm i` sadece CLI + lib indirir). Kullanmak için komut dosyasını bu repodan kendi projene kopyala:
-
-```bash
-# 1) CLI'yi devDependency olarak kur (reddit-scout + blog-image gelir)
-npm i -D reddit-blog-scout
-
-# 2) Komut dosyasını projenin .claude/commands/ altına al
-mkdir -p .claude/commands
-curl -o .claude/commands/generate-blog.md \
-  https://raw.githubusercontent.com/akifkadioglu/reddit-ai-scout/main/.claude/commands/generate-blog.md
-# (alternatif: repodaki .claude/commands/generate-blog.md dosyasını elle kopyala)
-
-# 3) Görseller için anahtar
-echo "GEMINI_API_KEY=..." >> .env
-```
-
-Sonra dosyanın en üstündeki `──── CONFIG ────` bloğunu doldur (marka, yazar havuzu, kategori whitelist, görsel stili, ton, yollar) — gerisi generic, bu değerleri okur. Artık Claude Code'da:
-
-```
-/generate-blog <locale> <keyword>     # locale opsiyonel, default en
-```
-
-1. **Araştırma** — Claude keyword'ü Reddit sorgusuna çevirir, `npx reddit-scout "<sorgu>"` ile postları çeker.
-2. **Konu seç** — gerçek tartışmalardan 4 blog konusu sunar; arrow-key ile seçersin ya da kendi başlığını yazarsın.
-3. **Ekleme** — "eklemek istediğin bir şey var mı?" diye sorar (açı, hedef kitle, ton, uzunluk…).
-4. **Üret** — tam SEO blog yazısını `content/blog/<locale>/<slug>.md` olarak yazar.
-5. **Görseller** — Claude cover + içerik görsellerini `npx blog-image` ile doğrudan üretir (`GEMINI_API_KEY`).
-
-## Reddit'e Nasıl Erişiyor
-
-Reddit, düz HTTP isteklerini çoğu IP'de **403** ile blokluyor (stdlib `urllib` de, node `fetch` de). Araç bunu iki adımda aşar:
-
-1. **Cookie hasadı (headless Chrome).** Bir kez headless Chrome (Puppeteer + stealth) reddit.com'a uğrar ve **guest cookie**'yi `page.cookies()` ile (httpOnly dahil) toplar. Cookie OS cache dizinine yazılır (`~/.cache/reddit-blog-scout/cookie.json`, Windows'ta `%LOCALAPPDATA%`). Consumer repo'su kirlenmez.
-2. **İstekler (plain fetch).** Sonraki tüm aramalar düz `fetch` ile, cookie header'ı + aynı Chrome UA'sı kullanılarak yapılır — tarayıcı açılmaz, hızlıdır. Cookie `REDDIT_COOKIE_TTL_MS` (default 6 saat) sonrası bayatlayınca otomatik yeniden hasat edilir.
-
-> **Not:** Reddit `HeadlessChrome` UA'sını blokluyor; hasat hem de fetch aynı normal Chrome UA'sını kullanır (UA tutarsızlığı tek başına 403 sebebi).
-
-Bir istek blok yerse (JSON yerine HTML duvar) cookie **bir kez** zorla yenilenip tekrar denenir. Anti-bot **flagged IP**'lerde (datacenter/VPN) guest cookie yine yetmeyebilir — bu durumda net hata döner; temiz bir ağ dene (interaktif login akışı yok).
-
-## Programatik Kullanım (devDependency)
-
-```bash
-npm i -D reddit-blog-scout
-```
+## Programmatic use (devDependency)
 
 ```js
 import { search } from "reddit-blog-scout";
@@ -104,11 +51,71 @@ const { subreddits, posts } = await search("instagram dm automation", 10);
 // subreddits: [{ name, subscribers, description }, ...]
 ```
 
-İlk çağrıda cookie headless Chrome ile hasat edilip cache'lenir; sonraki çağrılar cache'ten plain fetch ile döner.
+On the first call the cookie is harvested with headless Chrome and cached; later calls
+return straight from the cache over plain fetch (no browser launch).
 
-## Görsel CLI (blog-image)
+## `.env` variables
 
-`/generate-blog` her görsel için bunu çağırır; elle de çalıştırabilirsin:
+| Variable               | Description                                      | Required             | Default          |
+|------------------------|--------------------------------------------------|----------------------|------------------|
+| `GEMINI_API_KEY`       | Image generation — `/generate-blog` image step   | Yes for images       | —                |
+| `IMG_ASPECT`           | Image aspect ratio                               | Optional             | `16:9`           |
+| `IMG_WIDTH`            | Image width (px, via macOS `sips`)               | Optional             | `1200`           |
+| `IMG_HEIGHT`           | Image height (px, via macOS `sips`)              | Optional             | `630`            |
+| `REDDIT_COOKIE_TTL_MS` | Guest-cookie cache lifetime (ms)                 | Optional             | `21600000` (6h)  |
+
+## The `/generate-blog` command (main path)
+
+`/generate-blog` is a **Claude Code command**; it is NOT shipped inside the npm package
+(`npm i` only pulls the CLI + library). To use it, copy the command file from this repo into
+your own project:
+
+```bash
+# 1) Install the CLI as a devDependency (ships reddit-scout + blog-image)
+npm i -D reddit-blog-scout
+
+# 2) Drop the command file into your project's .claude/commands/
+mkdir -p .claude/commands
+curl -o .claude/commands/generate-blog.md \
+  https://raw.githubusercontent.com/akifkadioglu/reddit-ai-scout/main/.claude/commands/generate-blog.md
+# (or copy .claude/commands/generate-blog.md from this repo by hand)
+
+# 3) Key for images
+echo "GEMINI_API_KEY=..." >> .env
+```
+
+Then fill in the `──── CONFIG ────` block at the top of that file (brand, author pool,
+category whitelist, image style, tone, paths) — everything below it is generic and reads
+those values. Now, inside Claude Code:
+
+```
+/generate-blog <locale> <keyword>     # locale optional, defaults to en
+```
+
+1. **Research** — Claude turns the keyword into a Reddit query and pulls posts via `npx reddit-scout "<query>"`.
+2. **Pick a topic** — it offers 4 blog topics from the real discussions; pick with arrow keys or type your own.
+3. **Additions** — it asks "anything to add?" (angle, audience, tone, length…).
+4. **Generate** — it writes the full SEO blog post to `content/blog/<locale>/<slug>.md`.
+5. **Images** — Claude generates the cover + in-content images directly via `npx blog-image` (`GEMINI_API_KEY`).
+
+## How it reaches Reddit
+
+Reddit blocks plain HTTP with a **403** on most IPs (both stdlib `urllib` and node `fetch`).
+This tool gets past that in two steps:
+
+1. **Cookie harvest (headless Chrome).** Once, headless Chrome (Puppeteer + stealth) visits reddit.com and harvests the **guest cookie** via `page.cookies()` (including httpOnly cookies). The cookie is cached in the OS cache dir (`~/.cache/reddit-blog-scout/cookie.json`, `%LOCALAPPDATA%` on Windows), so the consumer's repo stays clean.
+2. **Requests (plain fetch).** Every later search is a plain `fetch` with the cookie header and the same Chrome UA — no browser launch, so it's fast. Once the cookie goes stale past `REDDIT_COOKIE_TTL_MS` (default 6h) it is re-harvested automatically.
+
+> **Note:** Reddit blocks the `HeadlessChrome` UA, so both the harvest and the fetch use the same normal Chrome UA (a UA mismatch is itself a 403 trigger).
+
+If a request is blocked (an HTML wall instead of JSON), the cookie is force-refreshed **once**
+and retried. On anti-bot **flagged IPs** (datacenter / VPN) the guest cookie may still not be
+enough — in that case you get a clear error; try a clean network (there is no interactive
+login fallback).
+
+## Image CLI (blog-image)
+
+`/generate-blog` calls this for every image; you can also run it by hand:
 
 ```bash
 PROMPT='bright modern home office, no text, no logos' \
@@ -116,29 +123,35 @@ OUT='public/images/blogs/my-post/cover.jpg' \
 npx blog-image
 ```
 
-Gemini `gemini-2.5-flash-image` (Nano Banana) ile üretir, `OUT` zaten varsa atlar (idempotent). macOS'ta `sips` ile tam piksele resize eder; başka sistemde API oranında kalır.
+It generates with Gemini `gemini-2.5-flash-image` (Nano Banana) and skips if `OUT` already
+exists (idempotent). On macOS it resizes to exact pixels via `sips`; elsewhere it stays at
+the API aspect ratio.
 
-## Yapı
+## Layout
 
 ```
 reddit-blog-scout/
 ├── .claude/commands/
-│   └── generate-blog.md       # /generate-blog komutu (CONFIG + kurallar)
+│   └── generate-blog.md       # /generate-blog command (CONFIG + rules)
 ├── bin/
-│   ├── reddit-scout.js         # CLI: araştırma
-│   └── blog-image.js           # CLI: Gemini görsel üretimi
+│   ├── reddit-scout.js         # CLI: research
+│   └── blog-image.js           # CLI: Gemini image generation
 ├── src/
-│   ├── cookie.js               # Guest cookie hasadı (headless) + OS cache
+│   ├── cookie.js               # Guest-cookie harvest (headless) + OS cache
 │   ├── reddit.js               # Reddit search (plain fetch + cookie)
-│   └── markdown.js             # Markdown render + .previous/ çıktısı
-├── .previous/                  # reddit-scout çıktıları (<kelime>.md)
+│   └── markdown.js             # Markdown render + .previous/ output
+├── .previous/                  # reddit-scout output (<keyword>.md)
 ├── package.json
 └── .env.example
 ```
 
-## Notlar
+## Notes
 
-- Reddit cookie'si bir kez headless tarayıcı (Puppeteer) ile hasat edilir, sonra istekler plain fetch — OAuth/API anahtarı yok. `npm i` Chromium'u da indirir.
-- `/generate-blog` **OpenAI istemez**; sorgu + konu üretimini Claude yapar.
-- Görsel üretimi `GEMINI_API_KEY` ister; anahtar yoksa `blog-image` uyarır.
-- Cookie cache consumer repo'suna değil OS cache dizinine yazılır; `.env` git'e girmez (`.gitignore` korur).
+- The Reddit cookie is harvested once with a headless browser (Puppeteer), then requests are plain fetch — no OAuth/API key. `npm i` also downloads Chromium.
+- `/generate-blog` needs **no OpenAI**; Claude does query + topic generation.
+- Image generation needs `GEMINI_API_KEY`; without it `blog-image` warns.
+- The cookie cache lives in the OS cache dir, not the consumer's repo; `.env` is git-ignored.
+
+## License
+
+MIT © Akif
