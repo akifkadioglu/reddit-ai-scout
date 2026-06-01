@@ -1,0 +1,33 @@
+{
+  "name": "reddit-ai-scout",
+  "version": "1.0.0",
+  "description": "Keyword -> Reddit research (real posts + subreddits) as Markdown. Puppeteer-based, beats Reddit's 403 anti-bot. Feeds /generate-blog topic discovery.",
+  "type": "module",
+  "main": "src/reddit.js",
+  "exports": {
+    ".": "./src/reddit.js"
+  },
+  "bin": {
+    "reddit-scout": "bin/reddit-scout.js",
+    "blog-image": "bin/blog-image.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
+  "scripts": {
+    "scout": "node bin/reddit-scout.js"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "keywords": ["reddit", "scraper", "puppeteer", "seo", "blog", "research"],
+  "author": "Akif <hello@akifkadioglu.dev>",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^24.15.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}

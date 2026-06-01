@@ -80,16 +80,16 @@ Before writing ANY blog content, run this conversational intake. Ask one thing, 
 STEP 1 — Research Reddit for topic options:
 
 - First, expand the user's keyword into a tight Reddit search query YOURSELF (plain keywords, no operators). No external LLM is needed; you do this.
-- Run the Reddit scout in raw mode (NO OpenAI required) with that query:
+- Run the Reddit scout (the `reddit-ai-scout` npm package) with that query:
 
-  venv/bin/python main.py "<expanded query>" --raw
+  npx reddit-scout "<expanded query>" --limit 10
 
-  (on Windows use `venv/Scripts/python.exe main.py "<expanded query>" --raw`)
-- `--raw` skips OpenAI entirely: it only scrapes Reddit and writes `.previous/<slug>.md` with the real post titles + subreddits.
+  (if deps are missing, run `npm i` first in the project root)
+- The scout only scrapes Reddit (no AI/OpenAI). It writes `.previous/<slug>.md` with the real post titles + subreddits.
 - Read that file. From those real discussions, YOU generate 4 blog topic ideas (catchy title + 1-line description each), in the article's target language. This is your job, not a Python script's. (4, because the topic picker is arrow-key navigable and caps at 4 options.)
-- If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics.
+- If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics. If the scout reports a block page, tell the user to run `npx reddit-scout login` once, then retry.
 
-NOTE ON KEYS: This command does NOT need `OPENAI_API_KEY`. Query expansion and topic generation are done by you (Claude). Python is used only to scrape Reddit. (`GEMINI_API_KEY` is still required, but only later for the image-generation step.)
+NOTE ON KEYS: This command does NOT need `OPENAI_API_KEY`. Query expansion and topic generation are done by you (Claude). The `reddit-scout` npm CLI (Puppeteer) is used only to scrape Reddit. (`GEMINI_API_KEY` is still required, but only later for the image-generation step.)
 
 STEP 2 — Let the user pick ONE topic:
 
@@ -376,79 +376,35 @@ EXAMPLES:
 → root/content/blog/tr/present-perfect-tense.md
 
 ────────────────────────────────────────
-IMAGE GENERATION STEP (MANDATORY ACTION — SELF-CONTAINED, NO EXTERNAL SCRIPT)
+IMAGE GENERATION STEP (MANDATORY ACTION)
 ────────────────────────────────────────
 
-After the blog markdown file(s) are written, YOU generate the real images directly. There is NO helper script and no
-parsing step: you already know every image's exact target path and its IMAGE_PROMPT text, because you just wrote them.
-So for EACH image (the cover via its IMAGE_TARGET line, plus every in-content `![](...)` image), run the inline command
-below once, filling in PROMPT and OUT.
+After the blog markdown file(s) are written, YOU generate the real images directly. There is no parsing step: you
+already know every image's exact target path and its IMAGE_PROMPT text, because you just wrote them. So for EACH image
+(the cover via its IMAGE_TARGET line, plus every in-content `![](...)` image), run the `blog-image` CLI once, filling in
+PROMPT and OUT.
 
 PATH MAPPING: a markdown path `/images/blogs/<...>.jpg` maps to the file `public/images/blogs/<...>.jpg` (strip the
 leading slash, prefix with `public/`).
 
-Run this once per image. Pure `python3` stdlib (urllib + base64 + json) — portable, no `curl`/`awk`/`sh` dependency.
-It reads `GEMINI_API_KEY`, `IMG_ASPECT`, `IMG_WIDTH`, `IMG_HEIGHT` from `.env` (with sane defaults), calls Gemini
-(`gemini-2.5-flash-image` / Nano Banana), and writes the `.jpg`. Existing files are skipped (idempotent).
+`blog-image` (from the `reddit-ai-scout` npm package) reads `GEMINI_API_KEY`, `IMG_ASPECT`, `IMG_WIDTH`, `IMG_HEIGHT`
+from `.env` (with sane defaults), calls Gemini (`gemini-2.5-flash-image` / Nano Banana), and writes the `.jpg`. Existing
+files are skipped (idempotent).
 
 ```bash
 PROMPT='<paste the exact IMAGE_PROMPT text for THIS image>' \
 OUT='public/images/blogs/<...>.jpg' \
-python3 - <<'PY'
-import os, json, base64, urllib.request, subprocess, shutil
-
-def envfile(k, d=None):
-    v = os.environ.get(k)
-    if v: return v
-    try:
-        for line in open(".env"):
-            if line.startswith(k + "="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    except FileNotFoundError:
-        pass
-    return d
-
-key = envfile("GEMINI_API_KEY")
-if not key:
-    raise SystemExit("ERROR: GEMINI_API_KEY not found. Add it to .env or export it.")
-aspect = envfile("IMG_ASPECT", "16:9")
-w, h = envfile("IMG_WIDTH", "1200"), envfile("IMG_HEIGHT", "630")
-prompt, out = os.environ["PROMPT"], os.environ["OUT"]
-
-if os.path.exists(out):
-    print("skip", out, "(exists)"); raise SystemExit(0)
-os.makedirs(os.path.dirname(out), exist_ok=True)
-
-body = json.dumps({
-    "contents": [{"parts": [{"text": prompt}]}],
-    "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect}},
-}).encode()
-req = urllib.request.Request(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
-    data=body, headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-data = json.load(urllib.request.urlopen(req))
-parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
-for p in parts:
-    inl = p.get("inlineData") or p.get("inline_data")
-    if inl and inl.get("data"):
-        open(out, "wb").write(base64.b64decode(inl["data"]))
-        # force exact px (macOS sips if present; else leave at API aspect ratio)
-        if shutil.which("sips"):
-            subprocess.run(["sips", "--resampleWidth", w, out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["sips", "-c", h, w, out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("ok", out, f"({w}x{h})"); break
-else:
-    raise SystemExit(data.get("error", {}).get("message", "no image part in response"))
-PY
+npx blog-image
 ```
 
 - Run it for EVERY image in EVERY md file you wrote (cover + all in-content). If `en` and `tr` share images (same
   translation_id), the skip-if-exists guard makes re-running safe.
 - If the command reports `GEMINI_API_KEY not found`, tell the user to add `GEMINI_API_KEY=...` to `.env` and stop.
+- If deps are missing, run `npm i` first in the project root.
 - `sips` is macOS-only; on other systems the image stays at the requested aspect ratio (close to target) — that is fine.
 
 This is the one place this command performs an action beyond emitting markdown: it WRITES the md file(s) and GENERATES
-the images inline.
+the images via `blog-image`.
 
 ────────────────────────────────────────
 FINAL OUTPUT
