@@ -1,0 +1,24 @@
+# Sanal ortam
+venv/
+env/
+.venv/
+
+# Çevre değişkenleri — SIRLAR
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+build/
+dist/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
