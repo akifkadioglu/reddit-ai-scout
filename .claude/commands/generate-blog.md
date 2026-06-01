@@ -85,7 +85,7 @@ STEP 1 — Research Reddit for topic options:
   venv/bin/python main.py "<expanded query>" --raw
 
   (on Windows use `venv/Scripts/python.exe main.py "<expanded query>" --raw`)
-- `--raw` skips OpenAI entirely: it only scrapes Reddit and writes `result/<slug>.md` with the real post titles + subreddits.
+- `--raw` skips OpenAI entirely: it only scrapes Reddit and writes `.previous/<slug>.md` with the real post titles + subreddits.
 - Read that file. From those real discussions, YOU generate 4 blog topic ideas (catchy title + 1-line description each), in the article's target language. This is your job, not a Python script's. (4, because the topic picker is arrow-key navigable and caps at 4 options.)
 - If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics.
 
@@ -110,7 +110,7 @@ STEP 3 — Ask for additions:
 STEP 4 — Generate:
 
 - Now treat the chosen topic (+ any additions) as the final topic and produce the blog per all the rules below.
-- The Reddit `result/<slug>.md` discussions are useful raw material; lean on them for real questions, pains, and angles, but the OUTPUT is the polished SEO blog, not the topic list.
+- The Reddit `.previous/<slug>.md` discussions are useful raw material; lean on them for real questions, pains, and angles, but the OUTPUT is the polished SEO blog, not the topic list.
 
 Tooling note: `AskUserQuestion` caps at 4 options; that is why STEP 1 generates exactly 4 topics. The auto-added "Other" slot covers the custom-title case.
 
@@ -376,29 +376,85 @@ EXAMPLES:
 → root/content/blog/tr/present-perfect-tense.md
 
 ────────────────────────────────────────
-IMAGE GENERATION STEP (MANDATORY ACTION)
+IMAGE GENERATION STEP (MANDATORY ACTION — SELF-CONTAINED, NO EXTERNAL SCRIPT)
 ────────────────────────────────────────
 
-After the blog markdown file(s) are written to disk, generate the real images:
+After the blog markdown file(s) are written, YOU generate the real images directly. There is NO helper script and no
+parsing step: you already know every image's exact target path and its IMAGE_PROMPT text, because you just wrote them.
+So for EACH image (the cover via its IMAGE_TARGET line, plus every in-content `![](...)` image), run the inline command
+below once, filling in PROMPT and OUT.
 
-- For EVERY blog md file you wrote, run:
+PATH MAPPING: a markdown path `/images/blogs/<...>.jpg` maps to the file `public/images/blogs/<...>.jpg` (strip the
+leading slash, prefix with `public/`).
 
-  bash scripts/generate-blog-images.sh content/blog/<locale>/<slug>.md
+Run this once per image. Pure `python3` stdlib (urllib + base64 + json) — portable, no `curl`/`awk`/`sh` dependency.
+It reads `GEMINI_API_KEY`, `IMG_ASPECT`, `IMG_WIDTH`, `IMG_HEIGHT` from `.env` (with sane defaults), calls Gemini
+(`gemini-2.5-flash-image` / Nano Banana), and writes the `.jpg`. Existing files are skipped (idempotent).
 
-- This script reads all IMAGE_PROMPT blocks (cover + in-content) and produces the actual `.jpg` files under
-  `public/images/blogs/...` via the Gemini API.
-- Run it on every file written. If `en` and `tr` share the same images (same translation_id), the script skips
-  already-generated ones, so running on both is safe.
-- Requires `GEMINI_API_KEY` in `.env`. If the script reports the key is missing, tell the user to add it.
+```bash
+PROMPT='<paste the exact IMAGE_PROMPT text for THIS image>' \
+OUT='public/images/blogs/<...>.jpg' \
+python3 - <<'PY'
+import os, json, base64, urllib.request, subprocess, shutil
 
-This is the one place this command performs an action beyond emitting markdown: it WRITES the md file(s) and RUNS the
-image script.
+def envfile(k, d=None):
+    v = os.environ.get(k)
+    if v: return v
+    try:
+        for line in open(".env"):
+            if line.startswith(k + "="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return d
+
+key = envfile("GEMINI_API_KEY")
+if not key:
+    raise SystemExit("ERROR: GEMINI_API_KEY not found. Add it to .env or export it.")
+aspect = envfile("IMG_ASPECT", "16:9")
+w, h = envfile("IMG_WIDTH", "1200"), envfile("IMG_HEIGHT", "630")
+prompt, out = os.environ["PROMPT"], os.environ["OUT"]
+
+if os.path.exists(out):
+    print("skip", out, "(exists)"); raise SystemExit(0)
+os.makedirs(os.path.dirname(out), exist_ok=True)
+
+body = json.dumps({
+    "contents": [{"parts": [{"text": prompt}]}],
+    "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect}},
+}).encode()
+req = urllib.request.Request(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+    data=body, headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+data = json.load(urllib.request.urlopen(req))
+parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+for p in parts:
+    inl = p.get("inlineData") or p.get("inline_data")
+    if inl and inl.get("data"):
+        open(out, "wb").write(base64.b64decode(inl["data"]))
+        # force exact px (macOS sips if present; else leave at API aspect ratio)
+        if shutil.which("sips"):
+            subprocess.run(["sips", "--resampleWidth", w, out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["sips", "-c", h, w, out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("ok", out, f"({w}x{h})"); break
+else:
+    raise SystemExit(data.get("error", {}).get("message", "no image part in response"))
+PY
+```
+
+- Run it for EVERY image in EVERY md file you wrote (cover + all in-content). If `en` and `tr` share images (same
+  translation_id), the skip-if-exists guard makes re-running safe.
+- If the command reports `GEMINI_API_KEY not found`, tell the user to add `GEMINI_API_KEY=...` to `.env` and stop.
+- `sips` is macOS-only; on other systems the image stays at the requested aspect ratio (close to target) — that is fine.
+
+This is the one place this command performs an action beyond emitting markdown: it WRITES the md file(s) and GENERATES
+the images inline.
 
 ────────────────────────────────────────
 FINAL OUTPUT
 ────────────────────────────────────────
 
 - Write the markdown blog post file(s) to content/blog/<locale>/<slug>.md
-- Run the image generation script (above)
+- Generate every image inline (above), one command per image
 - No explanations
 - No commentary

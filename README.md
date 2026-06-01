@@ -5,7 +5,7 @@ Bir kelimeyi Reddit'te araştırır, gerçek tartışmalardan blog konuları ür
 İki kullanım yolu var:
 
 1. **`/generate-blog` (Claude command — ana yol)** — uçtan uca, interaktif. Reddit araştırması → konu seçimi → tam SEO blog + görseller. **OpenAI gerektirmez** (sorgu + konu üretimini Claude yapar). Görseller için `GEMINI_API_KEY` ister.
-2. **`make run` (standalone CLI)** — sadece Reddit araştırıp 10 blog konusu listeler (`result/<kelime>.md`). Bu **AI mode** OpenAI ister. OpenAI'sız varyantı: `make run-raw`.
+2. **`make run` (standalone CLI)** — sadece Reddit araştırıp 10 blog konusu listeler (`.previous/<kelime>.md`). Bu **AI mode** OpenAI ister. OpenAI'sız varyantı: `make run-raw`.
 
 ## Kurulum
 
@@ -43,7 +43,7 @@ cp .env.example .env              # Windows: copy .env.example .env
 
 ## `/generate-blog` Komutu (ana yol)
 
-Tanım: `.agents/commands/generate-blog.md`. Üstündeki **CONFIG** bloğunu doldur (marka adı, yazar havuzu, kategori whitelist) — gerisi generic.
+Tanım: `.claude/commands/generate-blog.md`. Üstündeki **CONFIG** bloğunu doldur (marka adı, yazar havuzu, kategori whitelist) — gerisi generic.
 
 Akış (plan modu gibi adım adım sorar):
 
@@ -55,7 +55,7 @@ Akış (plan modu gibi adım adım sorar):
 2. **Konu seç** — gerçek tartışmalardan ~10 blog konusu listeler; numara seçersin ya da kendi başlığını yazarsın.
 3. **Ekleme** — "eklemek istediğin bir şey var mı?" diye sorar (açı, hedef kitle, ton, uzunluk…).
 4. **Üret** — tam SEO blog yazısını `content/blog/<locale>/<slug>.md` olarak yazar.
-5. **Görseller** — `scripts/generate-blog-images.sh` ile cover + içerik görsellerini üretir (`GEMINI_API_KEY`).
+5. **Görseller** — Claude cover + içerik görsellerini skill içindeki inline `python3` komutuyla doğrudan üretir (`GEMINI_API_KEY`). Harici script yok.
 
 ## Reddit'e Nasıl Erişiyor
 
@@ -135,25 +135,23 @@ python main.py "bitcoin" --raw --limit 15          # raw, OpenAI'siz
 
 ## Çıktı
 
-- **`make run` (AI mode):** `result/<kelime>.md` — `# Blog Topic Ideas` başlığı, numaralı **10 blog konusu** (`OUTPUT_LANG` dilinde) + kaynak Reddit linkleri.
-- **`make run-raw` / `--raw`:** `result/<kelime>.md` — `# Reddit Research` başlığı, ham post listesi + subreddit'ler (konu üretmez).
+- **`make run` (AI mode):** `.previous/<kelime>.md` — `# Blog Topic Ideas` başlığı, numaralı **10 blog konusu** (`OUTPUT_LANG` dilinde) + kaynak Reddit linkleri.
+- **`make run-raw` / `--raw`:** `.previous/<kelime>.md` — `# Reddit Research` başlığı, ham post listesi + subreddit'ler (konu üretmez).
 - **`/generate-blog`:** `content/blog/<locale>/<slug>.md` tam SEO blog yazısı + `public/images/blogs/...` altında üretilmiş görseller.
 
 ## Yapı
 
 ```
 reddit-ai-scout/
-├── .agents/commands/
-│   └── generate-blog.md       # /generate-blog komutu (CONFIG + tum kurallar)
-├── scripts/
-│   └── generate-blog-images.sh # IMAGE_PROMPT bloklarindan gorsel uretir (Gemini)
+├── .claude/commands/
+│   └── generate-blog.md       # /generate-blog komutu (CONFIG + kurallar + inline gorsel uretimi)
 ├── src/
 │   ├── reddit_client.py        # Reddit scraper (Playwright + tarayici cookie enjekte)
 │   ├── openai_client.py        # Sorgu optimize + konu uretimi (sadece AI mode)
 │   ├── login.py                # Bir kerelik Reddit girisi (opsiyonel)
 │   └── config.py               # .env yukleme
 ├── main.py                     # CLI — AI mode | --raw mode
-├── result/                     # make run/run-raw ciktilari (<kelime>.md)
+├── .previous/                  # make run/run-raw ciktilari (<kelime>.md)
 ├── Makefile                    # setup / login / run / run-raw / clean
 └── requirements.txt
 ```
@@ -162,5 +160,5 @@ reddit-ai-scout/
 
 - Reddit verisi gerçek tarayıcı (Playwright) ile çekilir — OAuth/API anahtarı yok. `make setup` browser'ı da indirir; elle kurarken `playwright install chromium` çalıştır.
 - `/generate-blog` **OpenAI istemez**; `OPENAI_API_KEY` yalnız standalone `make run` (AI mode) için gerekir. Sadece komutu kullanacaksan `.env`'den çıkarabilirsin.
-- Görsel üretimi `GEMINI_API_KEY` ister; anahtar yoksa script uyarır.
+- Görsel üretimi `GEMINI_API_KEY` ister; Claude görselleri skill içindeki inline `python3` komutuyla üretir (harici script yok). Anahtar yoksa komut uyarır.
 - `.env` ve `.reddit_profile/` git'e girmez (`.gitignore` korur).

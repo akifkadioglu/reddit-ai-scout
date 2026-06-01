@@ -11,7 +11,7 @@ from pathlib import Path
 from src import reddit_client, openai_client
 from src.config import OPENAI_API_KEY
 
-RESULT_DIR = Path("result")
+RESULT_DIR = Path(".previous")
 
 
 def _slugify(text: str) -> str:
@@ -46,7 +46,7 @@ def build_markdown(keyword: str, query: str, topics: list[dict], posts: list[dic
 
 
 def save_markdown(keyword: str, content: str) -> Path:
-    """Write the result to result/<keyword>.md."""
+    """Write the result to .previous/<keyword>.md."""
     RESULT_DIR.mkdir(exist_ok=True)
     path = RESULT_DIR / f"{_slugify(keyword)}.md"
     path.write_text(content, encoding="utf-8")

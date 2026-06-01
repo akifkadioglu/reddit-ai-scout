@@ -9,8 +9,8 @@ env/
 # Reddit browser profili (login cookie'leri) — gizli kalmalı
 .reddit_profile/
 
-# Arama çıktıları
-result/
+# Arama çıktıları (geçmiş)
+.previous/
 
 # Python cache
 __pycache__/
