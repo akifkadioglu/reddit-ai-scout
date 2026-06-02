@@ -14,11 +14,17 @@ export function slugify(text) {
   return slug || "query";
 }
 
+/** Collapse runs of whitespace/newlines into single spaces without truncating content. */
+function tidy(text) {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
 /**
  * Render raw Reddit research (no AI) as Markdown for a downstream LLM.
- * Byte-for-byte compatible with main.py:build_raw_markdown so /generate-blog keeps reading it.
+ * Without `threads` (deep=0) the output is byte-for-byte the same as before so /generate-blog
+ * keeps reading it; when `threads` is non-empty, a Deep Dive section is appended at the bottom.
  */
-export function buildRawMarkdown(keyword, query, subreddits, posts) {
+export function buildRawMarkdown(keyword, query, subreddits, posts, threads = []) {
   const lines = [
     `# Reddit Research: ${keyword}`,
     "",
@@ -40,6 +46,28 @@ export function buildRawMarkdown(keyword, query, subreddits, posts) {
     lines.push(`- r/${s.name} (${subs} subs) — ${desc}`);
   }
   lines.push("");
+
+  if (threads.length) {
+    lines.push("## Deep Dive (post bodies + top comments)");
+    lines.push("");
+    for (const t of threads) {
+      lines.push(`### ${t.title} — r/${t.subreddit} (${t.score} pts)`);
+      lines.push(t.url);
+      lines.push("");
+      if (t.selftext) {
+        lines.push(tidy(t.selftext));
+        lines.push("");
+      }
+      if (t.comments.length) {
+        lines.push("**Top comments:**");
+        for (const c of t.comments) {
+          lines.push(`- (${c.score}) ${tidy(c.body)}`);
+        }
+        lines.push("");
+      }
+    }
+  }
+
   return lines.join("\n");
 }
 

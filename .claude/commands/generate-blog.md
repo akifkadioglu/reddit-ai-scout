@@ -115,15 +115,16 @@ then continue (same feel as plan mode). Do NOT generate the article until intake
 ## Step 1 — Research Reddit for topic options
 
 - First, expand the user's keyword into a tight Reddit search query YOURSELF (plain keywords, no operators). No external LLM is needed; you do this.
-- Run the Reddit scout (the `reddit-blog-scout` npm package) with that query:
+- Run the Reddit scout (the `reddit-blog-scout` npm package) with that query, in DEEP mode (default for /generate-blog):
 
   ```bash
-  npx reddit-scout "<expanded query>" --limit 10
+  npx reddit-scout "<expanded query>" --limit 10 --deep 4
   ```
 
   (if deps are missing, run `npm i` first in the project root)
-- The scout only scrapes Reddit (no AI/OpenAI). It writes `.previous/<slug>.md` with the real post titles + subreddits.
-- Read that file. From those real discussions, YOU generate 4 blog topic ideas (catchy title + 1-line description each), in the article's target language. This is your job, not a script's. (4, because the topic picker is arrow-key navigable and caps at 4 options.)
+- `--deep 4` makes the scout also pull the BODY (selftext) + top comments of the 4 highest-scoring posts. Deep is the default here; only drop `--deep` if the user explicitly asks for a quick/surface scan.
+- The scout only scrapes Reddit (no AI/OpenAI). It writes `.previous/<slug>.md` with the real post titles + subreddits, plus a `## Deep Dive` section holding the top posts' real bodies and top comments.
+- Read that file, INCLUDING the `## Deep Dive` section. From those real discussions (titles + the deep bodies/comments), YOU generate 4 blog topic ideas (catchy title + 1-line description each), in the article's target language. This is your job, not a script's. (4, because the topic picker is arrow-key navigable and caps at 4 options.)
 - If the fetch fails (Reddit block, no posts), report the exact error to the user and stop. Do NOT invent topics. If the scout reports a block page, the IP is anti-bot flagged (datacenter/VPN); tell the user to retry on a clean network. There is no interactive login fallback.
 
 > **Keys:** This command does NOT need `OPENAI_API_KEY`. Query expansion and topic generation are done by you (Claude). The `reddit-scout` CLI (from `reddit-blog-scout`, Puppeteer) only scrapes Reddit. `GEMINI_API_KEY` is required, but only later for the image step.
@@ -144,10 +145,22 @@ then continue (same feel as plan mode). Do NOT generate the article until intake
 - Fold whatever they give into the article. If "yok"/empty, proceed with defaults.
 - Do NOT jump from topic-pick straight to generation. Step 3 runs every time.
 
+## Step 3.5 — Mine the Deep Dive for the chosen topic (deep mode)
+
+- Runs ONLY when the scout was run in deep mode (the `.previous/<slug>.md` has a `## Deep Dive` section). It is the default, so this normally always runs.
+- Re-read `.previous/<slug>.md`, focusing on the `## Deep Dive` blocks (post bodies + top comments) most relevant to the topic the user just picked.
+- Extract concrete raw material to make the article DEEPER than a title-only draft would be:
+  - real pain points and the exact wording people use
+  - recurring questions and disagreements in the comments
+  - specific examples, numbers, tools, workflows, edge cases people mention
+  - misconceptions to correct, and angles competitors miss
+- This is inspiration/grounding, NOT copy source: never paste comment text verbatim or quote usernames; synthesize the insight into original, polished prose.
+- Carry these extracted points into Step 4 so the blog answers what people actually asked, with real specificity.
+
 ## Step 4 — Generate
 
-- Now treat the chosen topic (+ any additions) as the final topic and produce the blog per all the rules below.
-- The Reddit `.previous/<slug>.md` discussions are useful raw material; lean on them for real questions, pains, and angles, but the OUTPUT is the polished SEO blog, not the topic list.
+- Now treat the chosen topic (+ any additions + the Step 3.5 deep insights) as the final topic and produce the blog per all the rules below.
+- The Reddit `.previous/<slug>.md` discussions are useful raw material; lean on them (especially the Deep Dive bodies/comments) for real questions, pains, and angles, but the OUTPUT is the polished SEO blog, not the topic list.
 
 > **Tooling note:** `AskUserQuestion` caps at 4 options; that is why Step 1 generates exactly 4 topics. The auto-added "Other" slot covers the custom-title case.
 

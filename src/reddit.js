@@ -63,10 +63,55 @@ async function fetchEndpoints(pathsParams) {
 }
 
 /**
- * Search subreddits and posts in one pass.
- * @returns {Promise<{subreddits: object[], posts: object[]}>}
+ * Deep pass: pull each post's body (selftext) + top comments from its `<permalink>.json`.
+ * Reuses the same cookie/host-fallback path as search. Best-effort: if the batch is blocked,
+ * every post degrades to an empty thread instead of failing the whole run.
+ * @returns {Promise<object[]>} one thread per input post (same order)
  */
-export async function search(query, limit = 10) {
+async function fetchThreads(posts, commentLimit = 8) {
+  const empty = posts.map((p) => ({
+    title: p.title,
+    subreddit: p.subreddit,
+    score: p.score,
+    url: p.url,
+    selftext: "",
+    comments: [],
+  }));
+  if (!posts.length) return empty;
+
+  let raws;
+  try {
+    raws = await fetchEndpoints(
+      posts.map((p) => [
+        // `/r/x/comments/abc/title/` -> `/r/x/comments/abc/title` (fetchOne appends `.json`).
+        p.permalink.replace(/\/$/, ""),
+        { limit: commentLimit, sort: "top", raw_json: 1 },
+      ])
+    );
+  } catch {
+    return empty; // blocked on the deep pass — keep the surface results we already have
+  }
+
+  return posts.map((p, i) => {
+    const raw = raws[i];
+    const selftext = (raw?.[0]?.data?.children?.[0]?.data?.selftext || "").trim();
+    const comments = (raw?.[1]?.data?.children || [])
+      .filter((c) => c.kind === "t1" && c.data?.body)
+      .slice(0, commentLimit)
+      .map((c) => ({ body: c.data.body.trim(), score: c.data.score ?? 0 }));
+    return { title: p.title, subreddit: p.subreddit, score: p.score, url: p.url, selftext, comments };
+  });
+}
+
+/**
+ * Search subreddits and posts in one pass. When `deep > 0`, also fetch the body + top
+ * comments of the `deep` highest-scoring posts (returned as `threads`).
+ * @param {string} query
+ * @param {number} limit
+ * @param {number} deep number of top posts to deep-fetch (0 = surface only, back-compat)
+ * @returns {Promise<{subreddits: object[], posts: object[], threads: object[]}>}
+ */
+export async function search(query, limit = 10, deep = 0) {
   const [subRaw, postRaw] = await fetchEndpoints([
     ["/subreddits/search", { q: query, limit }],
     ["/search", { q: query, limit, sort: "relevance" }],
@@ -82,6 +127,16 @@ export async function search(query, limit = 10) {
     subreddit: c.data?.subreddit,
     score: c.data?.score,
     url: `${BASE_URL}${c.data?.permalink || ""}`,
+    numComments: c.data?.num_comments,
+    upvoteRatio: c.data?.upvote_ratio,
+    permalink: c.data?.permalink || "",
   }));
-  return { subreddits, posts };
+
+  let threads = [];
+  if (deep > 0) {
+    const top = [...posts].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, deep);
+    threads = await fetchThreads(top);
+  }
+
+  return { subreddits, posts, threads };
 }

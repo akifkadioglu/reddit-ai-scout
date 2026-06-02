@@ -23,7 +23,15 @@ Requires Node >= 20.6 (uses `process.loadEnvFile` for `.env`).
 ```bash
 npx reddit-scout "instagram dm automation"          # writes .previous/<keyword>.md
 npx reddit-scout "bitcoin trading" --limit 15
+npx reddit-scout "bitcoin trading" --deep 3          # also pull the 3 top posts' bodies + comments
 ```
+
+Flags:
+
+| Flag        | Description                                                              | Default |
+|-------------|--------------------------------------------------------------------------|---------|
+| `--limit N` | Number of posts / subreddits to fetch.                                   | `10`    |
+| `--deep N`  | Deep mode: also fetch the body (selftext) + top comments of the `N` highest-scoring posts. `0` = surface only (titles/scores). | `0`     |
 
 Output `.previous/<keyword>.md`:
 
@@ -41,14 +49,34 @@ _Query: `<query>` — N posts across M subreddits. No AI applied; topic ideas ar
 ...
 ```
 
+With `--deep N`, a **Deep Dive** section is appended below (the sections above are unchanged):
+
+```
+## Deep Dive (post bodies + top comments)
+
+### <title> — r/<subreddit> (<score> pts)
+<url>
+
+<post body / selftext>
+
+**Top comments:**
+- (<score>) <comment body>
+- ...
+```
+
+Deep mode is best-effort: if a single thread is blocked, that post falls back to an empty
+body / no comments instead of failing the whole run.
+
 ## Programmatic use (devDependency)
 
 ```js
 import { search } from "reddit-blog-scout";
 
-const { subreddits, posts } = await search("instagram dm automation", 10);
-// posts:      [{ title, subreddit, score, url }, ...]
+const { subreddits, posts, threads } = await search("instagram dm automation", 10, 3);
+// posts:      [{ title, subreddit, score, url, numComments, upvoteRatio, permalink }, ...]
 // subreddits: [{ name, subscribers, description }, ...]
+// threads:    [{ title, subreddit, score, url, selftext, comments: [{ body, score }] }, ...]
+//             (the 3rd arg is `deep`; 0/omitted -> threads is [])
 ```
 
 On the first call the cookie is harvested with headless Chrome and cached; later calls
